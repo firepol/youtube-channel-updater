@@ -8,7 +8,7 @@ alwaysApply: true
 ## Project Context
 - Main specs: `docs/specifications.md`
 - Progress tracking: `docs/development-tracking.md`
-- Implementation plan: `docs/plan.md` (to be created)
+- Implementation plan: `docs/plan.md`
 
 ## Coding Standards
 - TypeScript with strict mode
