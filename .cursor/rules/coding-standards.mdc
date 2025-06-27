@@ -1,0 +1,42 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Coding Standards for YouTube Channel Updater
+
+## TypeScript Configuration
+- Use strict mode: `"strict": true`
+- Target ES2020 or higher
+- Use `ts-node` for development execution
+- Prefer `tsx` for faster execution
+
+## Error Handling
+- Implement retry logic: max 3 attempts with delays
+- Stop immediately on rate limit errors
+- Log all errors to `logs/errors.log`
+- Use `logVerbose()` for debug information
+
+## API Usage
+- Check rate limits before API calls
+- Use OAuth 2.0 for write operations
+- Use API Key for read operations
+- Implement proper error handling for API failures
+
+## File Naming
+- Use kebab-case for files: `populate-playlists.ts`
+- Use camelCase for functions: `fetchPlaylists()`
+- Use PascalCase for classes: `VideoProcessor`
+- Sanitize playlist names: spaces → underscores
+
+## Configuration
+- Use `.env` for sensitive data
+- Provide `.env.example` for setup
+- Use JSON for configuration files
+- Validate configuration on startup
+
+## Testing
+- Use Jest or Vitest for testing
+- Test API integration with mocks
+- Test error handling scenarios
+- Test rate limit handling

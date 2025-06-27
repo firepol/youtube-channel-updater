@@ -1,0 +1,38 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Cursor Rules for YouTube Channel Updater
+
+## Project Context
+- Main specs: `docs/specifications.md`
+- Progress tracking: `docs/development-tracking.md`
+- Implementation plan: `docs/plan.md` (to be created)
+
+## Coding Standards
+- TypeScript with strict mode
+- Use YouTube Data API v3
+- Follow error handling patterns from specs
+- Implement logging as specified
+- Use `ts-node` or `tsx` for running TypeScript scripts
+
+## File Organization
+- API integration in `src/api/`
+- Configuration in `config/`
+- Data storage in `data/`
+- Scripts in `scripts/`
+
+## Key Implementation Guidelines
+- Always check API rate limits before making calls
+- Use local database (`data/videos.json`) to avoid repeated API calls
+- Implement retry logic with 3 attempts for non-rate-limit errors
+- Log all errors to `logs/errors.log`
+- Use verbosity control via `VERBOSE` environment variable
+- Sanitize playlist names for file naming (spaces → underscores)
+
+## Sync Reminders
+- Update `development-tracking.md` after each significative change
+- Keep specs and implementation in sync
+- Document API rate limit considerations
+- Test with small datasets first
