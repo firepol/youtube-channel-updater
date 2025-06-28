@@ -1,0 +1,25 @@
+{
+  "playlists": [
+    {
+      "id": "PL_EXAMPLE_DARK_ZONE",
+      "title": "Dark Zone",
+      "description": "Dark Zone gameplay videos",
+      "keywords": ["DZ", "dark zone", "rogue", "going rogue"],
+      "visibility": "public"
+    },
+    {
+      "id": "PL_EXAMPLE_MISSIONS",
+      "title": "Missions",
+      "description": "Mission gameplay videos",
+      "keywords": ["mission", "story", "campaign"],
+      "visibility": "public"
+    },
+    {
+      "id": "PL_EXAMPLE_PVP",
+      "title": "PvP",
+      "description": "Player vs Player gameplay",
+      "keywords": ["pvp", "conflict", "skirmish"],
+      "visibility": "public"
+    }
+  ]
+} 

@@ -1,0 +1,24 @@
+{
+  "titleTransform": {
+    "pattern": "Tom Clancy's The Division 2 (\\d{4}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (.+)",
+    "replacement": "DZ $8 / The Division 2 / $1-$2-$3"
+  },
+  "descriptionTransform": {
+    "pattern": "Tom Clancy's The Division 2 (\\d{4}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2})",
+    "replacement": "Tom Clancy's The Division 2 / $1-$2-$3 $4:$5"
+  },
+  "baseTags": [
+    "The Division 2",
+    "Gaming",
+    "Gameplay",
+    "Tom Clancy"
+  ],
+  "maxDynamicTags": 2,
+  "metadataVersion": "v1.1",
+  "videoSettings": {
+    "madeForKids": false,
+    "license": "creativeCommon",
+    "categoryId": "20",
+    "allowRemixing": true
+  }
+} 

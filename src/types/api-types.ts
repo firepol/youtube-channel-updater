@@ -242,9 +242,9 @@ export interface ChangeHistory {
 export interface PlaylistRule {
   id: string;
   title: string;
-  description?: string;
+  description?: string | undefined;
   keywords: string[];
-  visibility?: 'public' | 'private' | 'unlisted';
+  visibility?: 'public' | 'private' | 'unlisted' | undefined;
 }
 
 export interface PlaylistConfig {
