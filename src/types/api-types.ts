@@ -203,15 +203,15 @@ export interface LocalVideo {
   title: string;
   description: string;
   publishedAt: string;
-  datetime?: string; // Extracted from filename/description
-  tags?: string[];
+  datetime?: string | undefined; // Extracted from filename/description
+  tags?: string[] | undefined;
   categoryId: string;
   privacyStatus: string;
   madeForKids: boolean;
   license: string;
-  recordingDate?: string;
-  lastProcessed?: string;
-  metadataVersion?: string;
+  recordingDate?: string | undefined;
+  lastProcessed?: string | undefined;
+  metadataVersion?: string | undefined;
 }
 
 export interface LocalPlaylist {
