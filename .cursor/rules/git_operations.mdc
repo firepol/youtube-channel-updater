@@ -1,0 +1,41 @@
+---
+description: Load when making any code changes, implementing features, fixing bugs, or when user mentions git operations. CRITICAL: This rule must be loaded for ALL development work to ensure automatic commits after each change.
+globs: 
+alwaysApply: false
+---
+# Git Operations Rules
+
+## Automatic Commit Workflow
+- **ALWAYS commit automatically after completing any code change, fix, or feature**
+- **DO NOT wait for user to request commits** - take initiative to commit after each working change
+- Before committing any changes:
+  1. Always run `git status` to check for all modified files
+  2. Review the list of modified files to ensure all related changes are included
+  3. Stage all related files together using `git add`
+  4. Verify the staged changes with `git status` again
+  5. Commit with an appropriate message following the commit message rules
+
+## Commit Message Format
+- Use conventional commit format: `<type>(<scope>): <description>`
+- Keep the first line under 80 characters
+- Write descriptive but concise messages - avoid listing specific file names
+- Focus on what was accomplished rather than which files were changed
+- Example: `refactor(rules): consolidate cursor rules and add automatic commit workflow`
+- **Always stage and commit all files related to a change together** including:
+  - Source files (e.g., components, pages, utils)
+  - Entry points (e.g., App.tsx, main.tsx)
+  - Configuration files (e.g., vite.config.ts, tsconfig.json, vitest.config.ts)
+  - Test files
+  - When dependencies are added/removed, always include both `package.json` and `yarn.lock`
+
+## Git Workflow Guidelines
+- When making changes that affect multiple files:
+  - Check `git status` before and after making changes
+  - Ensure all related files are staged together
+  - Do not commit partial changes that are logically related
+- When working with dependencies:
+  - Always check `git status` to ensure both `package.json` and lock files are included
+  - Verify that no unintended files are staged
+- When fixing issues or implementing features:
+  - Check `git status` to identify all affected files
+  - Include all related configuration, test, and documentation changes in the same commit
