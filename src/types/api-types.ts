@@ -212,6 +212,23 @@ export interface LocalVideo {
   recordingDate?: string | undefined;
   lastProcessed?: string | undefined;
   metadataVersion?: string | undefined;
+  // Additional fields for filtering
+  uploadStatus?: string | undefined;
+  processingStatus?: string | undefined;
+  embeddable?: boolean | undefined;
+  publicStatsViewable?: boolean | undefined;
+  definition?: string | undefined;
+  caption?: string | undefined;
+  defaultLanguage?: string | undefined;
+  defaultAudioLanguage?: string | undefined;
+  statistics?: {
+    viewCount: string;
+    likeCount: string;
+    dislikeCount: string;
+    favoriteCount: string;
+    commentCount: string;
+  } | undefined;
+  processingErrors?: string[] | undefined;
 }
 
 export interface LocalPlaylist {

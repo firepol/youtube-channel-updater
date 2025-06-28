@@ -1,0 +1,214 @@
+{
+  "initialProcessing": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "privacy_status",
+        "value": "private"
+      },
+      {
+        "type": "upload_status",
+        "value": "uploaded"
+      },
+      {
+        "type": "processing_status",
+        "value": "succeeded"
+      },
+      {
+        "type": "title_contains",
+        "value": "Tom Clancy",
+        "caseSensitive": false
+      },
+      {
+        "type": "description_not_contains",
+        "value": "[metadata",
+        "caseSensitive": false
+      },
+      {
+        "type": "made_for_kids",
+        "value": false
+      },
+      {
+        "type": "min_views",
+        "value": 0
+      },
+      {
+        "type": "published_after",
+        "value": "2025-01-01"
+      }
+    ]
+  },
+  "draftProcessing": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "upload_status",
+        "value": "uploaded"
+      },
+      {
+        "type": "privacy_status",
+        "value": "private"
+      },
+      {
+        "type": "processing_status",
+        "value": "succeeded"
+      }
+    ]
+  },
+  "notDraftVideos": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "privacy_status_not",
+        "value": "private"
+      }
+    ]
+  },
+  "failedProcessing": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "processing_status",
+        "value": "failed"
+      }
+    ]
+  },
+  "notFailedProcessing": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "processing_status_not",
+        "value": "failed"
+      }
+    ]
+  },
+  "popularVideos": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "min_views",
+        "value": 1000
+      },
+      {
+        "type": "privacy_status",
+        "value": "public"
+      }
+    ]
+  },
+  "unpopularVideos": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "views_not_min",
+        "value": 1000
+      },
+      {
+        "type": "privacy_status_not",
+        "value": "private"
+      }
+    ]
+  },
+  "nonGamingVideos": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "category_id_not",
+        "value": "20"
+      }
+    ]
+  },
+  "videosWithoutMetadata": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "has_metadata_version_not",
+        "value": true
+      }
+    ]
+  },
+  "recentVideos": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "published_after",
+        "value": "2025-01-01"
+      },
+      {
+        "type": "privacy_status_not",
+        "value": "private"
+      }
+    ]
+  },
+  "videosWithRecordingDate": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "has_recording_date",
+        "value": true
+      }
+    ]
+  },
+  "videosWithoutRecordingDate": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "has_recording_date_not",
+        "value": true
+      }
+    ]
+  },
+  "videosWithTags": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "has_tags",
+        "value": true
+      }
+    ]
+  },
+  "videosWithoutTags": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "has_tags_not",
+        "value": true
+      }
+    ]
+  },
+  "needsProcessing": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "needs_processing",
+        "value": true
+      }
+    ]
+  },
+  "alreadyProcessed": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "already_processed",
+        "value": true
+      }
+    ]
+  },
+  "processingFailed": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "processing_failed",
+        "value": true
+      }
+    ]
+  },
+  "hasProcessingErrors": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "has_processing_errors",
+        "value": true
+      }
+    ]
+  }
+} 

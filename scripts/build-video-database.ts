@@ -158,7 +158,18 @@ class VideoDatabaseBuilder {
       privacyStatus: video.privacyStatus || 'private',
       madeForKids: video.madeForKids || false,
       license: video.license || 'youtube',
-      recordingDate: video.recordingDate
+      recordingDate: video.recordingDate,
+      // Additional fields for filtering
+      uploadStatus: video.uploadStatus,
+      processingStatus: video.processingDetails?.processingStatus,
+      embeddable: video.embeddable,
+      publicStatsViewable: video.publicStatsViewable,
+      definition: video.definition,
+      caption: video.caption,
+      defaultLanguage: video.defaultLanguage,
+      defaultAudioLanguage: video.defaultAudioLanguage,
+      statistics: video.statistics,
+      processingErrors: video.suggestions?.processingErrors
     };
   }
 
