@@ -15,6 +15,7 @@
   ],
   "maxDynamicTags": 2,
   "metadataVersion": "v1.1",
+  "_comment": "metadataVersion will be used with processing ID format: [metadata v1.1: proc_20250627_100132]",
   "videoSettings": {
     "madeForKids": false,
     "license": "creativeCommon",

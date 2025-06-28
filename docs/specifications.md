@@ -45,7 +45,7 @@
 #### Description Transformation
 - **Input**: `Tom Clancy's The Division 2 2025 03 29   10 01 17 02`
 - **Output**: `Tom Clancy's The Division 2 / 2025-03-29 10:01`
-- **Metadata Tag**: `[metadata v1.1: 2025-06-27 10:01:32]` (added to description)
+- **Metadata Tag**: `[metadata v1.1: proc_20250627_100132]` (added to description)
 
 #### Video Settings
 - **Audience**: "No, it's not made for kids" (checked)
@@ -128,8 +128,14 @@
 **Solution**: Implement metadata versioning system to avoid reprocessing videos unnecessarily.
 
 ### Metadata Versioning System
-- **Version Tag**: `[metadata v1.1: 2025-06-27 10:01:32]` in video description
+- **Version Tag**: `[metadata v1.1: proc_20250627_100132]` in video description
 - **Purpose**: Track which videos have been processed and with which rule version
+- **Format**: Uses "proc_" prefix with date (YYYYMMDD) and time (HHMMSS) without separators
+- **Benefits**: 
+  - Completely avoids confusion when searching videos by recording date
+  - Clear "proc_" prefix distinguishes processing time from content dates
+  - No dashes or standard date formats that could match search queries
+  - Compact format that's still human-readable
 - **Smart Processing**: Only process videos without metadata tag or with outdated version
 - **Initial Processing Rules**: Configurable filters for identifying unprocessed videos
 - **Benefits**: 
