@@ -232,22 +232,25 @@
    - Automatic date insertion in titles
    - Playlist assignment based on content type
 
-## Project Structure (Proposed)
+## Project Structure (Current)
 
 ```
 youtube-channel-updater/
 ├── src/
 │   ├── api/           # YouTube API integration
-│   ├── rules/         # Video processing rules
-│   ├── utils/         # Utility functions
+│   │   └── youtube-client.ts
+│   ├── config/        # Configuration parsers
+│   │   └── config-loader.ts
 │   ├── types/         # TypeScript type definitions
-│   └── config/        # Configuration parsers
+│   │   └── api-types.ts
+│   └── utils/         # Utility functions
+│       └── logger.ts
 ├── config.example/    # Example configuration files
-│   ├── playlists.json # Example playlist rules configuration
-│   └── templates.json # Example title/description templates
+│   ├── playlists.example.json # Example playlist rules configuration
+│   └── video-processing.example.json # Example video processing configuration
 ├── config/            # Personal configuration files (gitignored)
 │   ├── playlists.json # Playlist rules configuration
-│   └── templates.json # Title/description templates
+│   └── video-processing.json # Video processing configuration
 ├── data/              # Local database and cache (gitignored)
 │   ├── videos.json    # Complete channel video database
 │   ├── history.json   # Metadata change history
@@ -257,15 +260,35 @@ youtube-channel-updater/
 │       └── ...
 ├── logs/              # Log files (gitignored)
 │   └── errors.log     # Error logs
-├── tests/             # Test files
 ├── docs/              # Documentation
+│   ├── specifications.md
+│   ├── plan.md
+│   ├── development-tracking.md
+│   └── prds/          # Product Requirements Documents
+│       ├── 1.1-project-initialization.md
+│       ├── 1.2-youtube-api-integration.md
+│       ├── 1.3-configuration-system.md
+│       ├── 2.1-video-database-builder.md
+│       ├── 2.2-playlist-discovery.md
+│       ├── 2.3-playlist-content-builder.md
+│       ├── 3.1-video-filtering-system.md
+│       ├── 3.2-video-processing-engine.md
+│       ├── 3.3-playlist-management.md
+│       ├── 4.1-main-update-script.md
+│       ├── 4.2-logging-error-handling.md
+│       └── 4.3-testing-validation.md
 ├── scripts/           # Executable scripts
-│   ├── populate-playlists.ts  # Script to populate playlists.json
-│   ├── update-videos.ts       # Main video update script
-│   ├── refresh-cache.ts       # Manual cache refresh script
-│   └── fetch-playlists.ts     # Fetch playlist video IDs
+│   ├── build-video-database.ts    # Build initial video database
+│   ├── discover-playlists.ts      # Discover and cache playlists
+│   ├── build-playlist-content.ts  # Populate playlist content
+│   ├── filter-videos.ts           # Video filtering system
+│   ├── process-videos.ts          # Video processing engine
+│   ├── manage-playlists.ts        # Playlist management
+│   └── update-channel.ts          # Main orchestration script
 ├── .env.example       # Environment variables example
 ├── .env               # Environment variables (gitignored)
+├── package.json       # Project dependencies
+├── tsconfig.json      # TypeScript configuration
 └── .gitignore         # Git ignore file
 ```
 
@@ -287,17 +310,109 @@ VERBOSE=true
     "enabled": true,
     "filters": [
       {
+        "type": "privacy_status",
+        "value": "private"
+      },
+      {
+        "type": "upload_status",
+        "value": "uploaded"
+      },
+      {
+        "type": "processing_status",
+        "value": "succeeded"
+      },
+      {
         "type": "title_contains",
-        "value": "Tom Clancy"
+        "value": "Tom Clancy",
+        "caseSensitive": false
       },
       {
         "type": "description_not_contains",
-        "value": "[metadata"
+        "value": "[metadata",
+        "caseSensitive": false
+      },
+      {
+        "type": "made_for_kids",
+        "value": false
+      },
+      {
+        "type": "min_views",
+        "value": 0
+      },
+      {
+        "type": "published_after",
+        "value": "2025-01-01"
+      }
+    ]
+  },
+  "draftProcessing": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "upload_status",
+        "value": "uploaded"
+      },
+      {
+        "type": "privacy_status",
+        "value": "private"
+      },
+      {
+        "type": "processing_status",
+        "value": "succeeded"
+      }
+    ]
+  },
+  "notDraftVideos": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "privacy_status_not",
+        "value": "private"
+      }
+    ]
+  },
+  "failedProcessing": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "processing_status",
+        "value": "failed"
+      }
+    ]
+  },
+  "popularVideos": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "min_views",
+        "value": 1000
+      },
+      {
+        "type": "privacy_status",
+        "value": "public"
+      }
+    ]
+  },
+  "videosWithoutMetadata": {
+    "enabled": true,
+    "filters": [
+      {
+        "type": "has_metadata_version_not",
+        "value": true
       }
     ]
   }
 }
 ```
+
+**Available Filter Types:**
+- **Status Filters**: `privacy_status`, `upload_status`, `processing_status`, `made_for_kids`, `embeddable`, `public_stats_viewable` (with `_not` variants)
+- **Date Filters**: `published_after/before`, `recording_date_after/before`, `last_processed_after/before` (with `_not` variants)
+- **Statistics Filters**: `min/max_views`, `min/max_likes`, `min/max_comments` (with `_not` variants)
+- **Content Filters**: `category_id`, `license`, `definition`, `caption`, `default_language` (with `_not` variants)
+- **Text Filters**: `title/description/tags_contains/not_contains`
+- **Metadata Filters**: `metadata_version`, `has_metadata_version`, `has_recording_date`, `has_tags` (with `_not` variants)
+- **Processing Filters**: `needs_processing`, `already_processed`, `processing_failed`, `has_processing_errors` (with `_not` variants)
 
 ### Playlist Rules JSON Structure
 ```json

@@ -80,16 +80,23 @@ This plan outlines the step-by-step implementation of the YouTube Channel Update
 ## Phase 3: Processing Logic
 
 ### 3.1 Video Filtering System
-- **Task**: Implement video filtering based on rules
+- **Task**: Implement comprehensive video filtering based on all YouTube API fields
 - **Script**: `scripts/filter-videos.ts`
 - **Features**:
-  - Filter by title_contains, description_contains
-  - Filter by title_not_contains, description_not_contains
+  - **Status Filters**: Filter by privacy status, upload status, processing status, made for kids, embeddable, public stats viewable (with `_not` variants)
+  - **Date Filters**: Filter by published date, recording date, last processed date ranges (with `_not` variants)
+  - **Statistics Filters**: Filter by view count, like count, comment count ranges (with `_not` variants)
+  - **Content Filters**: Filter by category ID, license, definition, caption, language settings (with `_not` variants)
+  - **Text Filters**: Filter by title/description/tags contains/not_contains
+  - **Metadata Filters**: Filter by metadata version, has metadata version, has recording date, has tags (with `_not` variants)
+  - **Processing Filters**: Filter by needs processing, already processed, processing failed, has processing errors (with `_not` variants)
   - Support for metadata version checking
-  - Configurable filter rules
+  - Configurable filter rules with multiple processing scenarios
   - Preview mode (show count without processing)
+  - Command-line interface with all filter types
+  - Configuration file support for complex filter combinations
 - **Dependencies**: 2.1, 1.3
-- **Estimated Time**: 2 hours
+- **Estimated Time**: 3 hours (increased due to comprehensive filter types)
 
 ### 3.2 Video Processing Engine
 - **Task**: Core video processing logic
