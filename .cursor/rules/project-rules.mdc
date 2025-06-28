@@ -7,8 +7,8 @@ alwaysApply: true
 
 ## Project Context
 - Main specs: `docs/specifications.md`
-- Progress tracking: `docs/development-tracking.md`
 - Implementation plan: `docs/plan.md`
+- Progress tracking: `docs/development-tracking.md`
 
 ## Coding Standards
 - TypeScript with strict mode
@@ -31,8 +31,16 @@ alwaysApply: true
 - Use verbosity control via `VERBOSE` environment variable
 - Sanitize playlist names for file naming (spaces → underscores)
 
+## Documentation Rules
+- **ALWAYS** update `docs/development-tracking.md` with today's date when making progress
+- Use format: `2025-06-27 15:50:45` for timestamps
+- Mark tasks as ✅ Complete, 🔄 In Progress, or ⏸️ Blocked
+- Update progress after each significant milestone
+- Keep specs and implementation in sync
+
 ## Sync Reminders
-- Update `development-tracking.md` after each significative change
+- Update `docs/development-tracking.md` after each significative change
 - Keep specs and implementation in sync
 - Document API rate limit considerations
 - Test with small datasets first
+- **CRITICAL**: Check today's date and update timestamps in tracking files
