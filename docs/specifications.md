@@ -481,11 +481,28 @@ VERBOSE=true
   "videos": [
     {
       "id": "video_id_1",
-      "title": "DZ going rogue gone wrong / The Division 2 / 2025-03-29",
-      "description": "Tom Clancy's The Division 2 / 2025-03-29 10:01",
-      "datetime": "2025-03-29T10:01:00Z",
-      "recordingDate": "2025-03-29",
-      "lastUpdated": "2025-06-27T10:01:32Z"
+      "title": "Example Video Title",
+      "description": "This is an example video description.",
+      "publishedAt": "2025-06-26T12:26:13Z",
+      "datetime": "2025-06-26",
+      "tags": ["tag1", "tag2"],
+      "categoryId": "20",
+      "privacyStatus": "public",
+      "madeForKids": false,
+      "license": "youtube",
+      "uploadStatus": "processed",
+      "embeddable": true,
+      "publicStatsViewable": true,
+      "definition": "hd",
+      "caption": "false",
+      "statistics": {
+        "viewCount": "123",
+        "likeCount": "10",
+        "favoriteCount": "0",
+        "commentCount": "2"
+      },
+      "lastFetched": "2025-06-29T20:10:43.642Z",
+      "lastUpdated": "2025-06-26T12:26:13Z"
     }
   ]
 }

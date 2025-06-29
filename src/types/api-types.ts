@@ -1,35 +1,47 @@
 // YouTube API Response Types
 export interface YouTubeVideo {
   id: string;
-  title: string;
-  description: string;
-  publishedAt: string;
-  thumbnails: {
-    default?: { url: string; width: number; height: number };
-    medium?: { url: string; width: number; height: number };
-    high?: { url: string; width: number; height: number };
+  snippet?: {
+    title: string;
+    description: string;
+    publishedAt: string;
+    thumbnails: {
+      default?: { url: string; width: number; height: number };
+      medium?: { url: string; width: number; height: number };
+      high?: { url: string; width: number; height: number };
+    };
+    tags?: string[];
+    categoryId: string;
+    defaultLanguage?: string;
+    defaultAudioLanguage?: string;
+    channelId: string;
+    channelTitle: string;
+    liveBroadcastContent: string;
+    localized?: {
+      title: string;
+      description: string;
+    };
   };
-  tags?: string[];
-  categoryId: string;
-  defaultLanguage?: string;
-  defaultAudioLanguage?: string;
-  duration?: string;
-  dimension?: {
-    width: string;
-    height: string;
+  contentDetails?: {
+    duration: string;
+    dimension: {
+      width: string;
+      height: string;
+    };
+    definition?: string;
+    caption?: string;
+    licensedContent?: boolean;
+    contentRating?: Record<string, string>;
+    projection?: string;
   };
-  definition?: string;
-  caption?: string;
-  licensedContent?: boolean;
-  contentRating?: Record<string, string>;
-  projection?: string;
-  hasCustomThumbnail?: boolean;
-  uploadStatus?: string;
-  privacyStatus?: string;
-  license?: string;
-  embeddable?: boolean;
-  publicStatsViewable?: boolean;
-  madeForKids?: boolean;
+  status?: {
+    uploadStatus: string;
+    privacyStatus: string;
+    license: string;
+    embeddable?: boolean;
+    publicStatsViewable?: boolean;
+    madeForKids?: boolean;
+  };
   recordingDate?: string;
   location?: {
     latitude: number;
@@ -80,14 +92,6 @@ export interface YouTubeVideo {
     dislikeCount: string;
     favoriteCount: string;
     commentCount: string;
-  };
-  status?: {
-    uploadStatus: string;
-    privacyStatus: string;
-    license: string;
-    embeddable: boolean;
-    publicStatsViewable: boolean;
-    madeForKids: boolean;
   };
 }
 
@@ -229,6 +233,9 @@ export interface LocalVideo {
     commentCount: string;
   } | undefined;
   processingErrors?: string[] | undefined;
+  // Metadata tracking
+  lastFetched: string; // When we last fetched this data
+  lastUpdated: string; // When YouTube last updated this video
 }
 
 export interface LocalPlaylist {

@@ -136,15 +136,19 @@ class VideoDatabaseBuilder {
    */
   private extractDatetime(video: YouTubeVideo): string | undefined {
     // Try to extract from title first
-    const titleMatch = video.title.match(/(\d{4})[.\s-](\d{2})[.\s-](\d{2})/);
-    if (titleMatch) {
-      return `${titleMatch[1]}-${titleMatch[2]}-${titleMatch[3]}`;
+    if (video.snippet?.title) {
+      const titleMatch = video.snippet.title.match(/(\d{4})[.\s-](\d{2})[.\s-](\d{2})/);
+      if (titleMatch) {
+        return `${titleMatch[1]}-${titleMatch[2]}-${titleMatch[3]}`;
+      }
     }
 
     // Try to extract from description
-    const descMatch = video.description.match(/(\d{4})[.\s-](\d{2})[.\s-](\d{2})/);
-    if (descMatch) {
-      return `${descMatch[1]}-${descMatch[2]}-${descMatch[3]}`;
+    if (video.snippet?.description) {
+      const descMatch = video.snippet.description.match(/(\d{4})[.\s-](\d{2})[.\s-](\d{2})/);
+      if (descMatch) {
+        return `${descMatch[1]}-${descMatch[2]}-${descMatch[3]}`;
+      }
     }
 
     return undefined;
@@ -156,27 +160,30 @@ class VideoDatabaseBuilder {
   private convertToLocalVideo(video: YouTubeVideo): LocalVideo {
     return {
       id: video.id,
-      title: video.title,
-      description: video.description,
-      publishedAt: video.publishedAt,
+      title: video.snippet?.title || '',
+      description: video.snippet?.description || '',
+      publishedAt: video.snippet?.publishedAt || '',
       datetime: this.extractDatetime(video),
-      tags: video.tags || [],
-      categoryId: video.categoryId || '20',
-      privacyStatus: video.privacyStatus || 'private',
-      madeForKids: video.madeForKids || false,
-      license: video.license || 'youtube',
+      tags: video.snippet?.tags || [],
+      categoryId: video.snippet?.categoryId || '20',
+      privacyStatus: video.status?.privacyStatus || 'private',
+      madeForKids: video.status?.madeForKids || false,
+      license: video.status?.license || 'youtube',
       recordingDate: video.recordingDate,
       // Additional fields for filtering
-      uploadStatus: video.uploadStatus,
+      uploadStatus: video.status?.uploadStatus,
       processingStatus: video.processingDetails?.processingStatus,
-      embeddable: video.embeddable,
-      publicStatsViewable: video.publicStatsViewable,
-      definition: video.definition,
-      caption: video.caption,
-      defaultLanguage: video.defaultLanguage,
-      defaultAudioLanguage: video.defaultAudioLanguage,
+      embeddable: video.status?.embeddable,
+      publicStatsViewable: video.status?.publicStatsViewable,
+      definition: video.contentDetails?.definition,
+      caption: video.contentDetails?.caption,
+      defaultLanguage: video.snippet?.defaultLanguage,
+      defaultAudioLanguage: video.snippet?.defaultAudioLanguage,
       statistics: video.statistics,
-      processingErrors: video.suggestions?.processingErrors
+      processingErrors: video.suggestions?.processingErrors,
+      // Metadata tracking
+      lastFetched: new Date().toISOString(),
+      lastUpdated: video.snippet?.publishedAt || '' // YouTube doesn't provide updatedAt, use publishedAt
     };
   }
 

@@ -212,7 +212,6 @@ export class YouTubeClient {
     return this.executeApiCall(
       async () => {
         const response = await this.youtube.channels.list({
-          auth: this.oauth2Client,
           key: this.apiKey,
           part: ['snippet', 'statistics', 'status', 'brandingSettings'],
           id: [this.channelId]
@@ -236,7 +235,6 @@ export class YouTubeClient {
     return this.executeApiCall(
       async () => {
         const response = await this.youtube.search.list({
-          auth: this.oauth2Client,
           key: this.apiKey,
           part: ['snippet'],
           channelId: this.channelId,
@@ -273,7 +271,6 @@ export class YouTubeClient {
     return this.executeApiCall(
       async () => {
         const response = await this.youtube.videos.list({
-          auth: this.oauth2Client,
           key: this.apiKey,
           part: ['snippet', 'status', 'statistics', 'contentDetails'],
           id: videoIds
@@ -336,7 +333,6 @@ export class YouTubeClient {
     return this.executeApiCall(
       async () => {
         const response = await this.youtube.playlists.list({
-          auth: this.oauth2Client,
           key: this.apiKey,
           part: ['snippet', 'contentDetails'],
           channelId: this.channelId,
@@ -362,7 +358,6 @@ export class YouTubeClient {
     return this.executeApiCall(
       async () => {
         const response = await this.youtube.playlistItems.list({
-          auth: this.oauth2Client,
           key: this.apiKey,
           part: ['snippet'],
           playlistId,
