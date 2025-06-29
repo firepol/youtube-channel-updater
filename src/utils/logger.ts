@@ -1,6 +1,5 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import chalk from 'chalk';
 
 // Log levels
 export enum LogLevel {
@@ -18,10 +17,28 @@ interface LoggerConfig {
 
 class Logger {
   private config: LoggerConfig;
+  private chalk: any;
 
   constructor(config: LoggerConfig) {
     this.config = config;
     this.ensureLogsDirectory();
+    this.initializeChalk();
+  }
+
+  private async initializeChalk(): Promise<void> {
+    try {
+      this.chalk = (await import('chalk')).default;
+    } catch (error) {
+      // Fallback to basic colors if chalk fails to load
+      this.chalk = {
+        red: (text: string) => text,
+        blue: (text: string) => text,
+        gray: (text: string) => text,
+        green: (text: string) => text,
+        yellow: (text: string) => text,
+        cyan: (text: string) => text
+      };
+    }
   }
 
   private ensureLogsDirectory(): void {
@@ -65,7 +82,7 @@ class Logger {
     const errorMessage = error ? `${message}: ${error.message}` : message;
     const formattedMessage = this.formatMessage(LogLevel.ERROR, errorMessage);
     
-    console.error(chalk.red(formattedMessage));
+    console.error(this.chalk.red(formattedMessage));
     this.writeToFile(LogLevel.ERROR, errorMessage);
     
     // Always write errors to errors.log regardless of log level
@@ -83,7 +100,7 @@ class Logger {
     if (!this.shouldLog(LogLevel.INFO)) return;
 
     const formattedMessage = this.formatMessage(LogLevel.INFO, message);
-    console.log(chalk.blue(formattedMessage));
+    console.log(this.chalk.blue(formattedMessage));
     this.writeToFile(LogLevel.INFO, message);
   }
 
@@ -91,7 +108,7 @@ class Logger {
     if (!this.shouldLog(LogLevel.VERBOSE) || !this.config.verbose) return;
 
     const formattedMessage = this.formatMessage(LogLevel.VERBOSE, message);
-    console.log(chalk.gray(formattedMessage));
+    console.log(this.chalk.gray(formattedMessage));
     this.writeToFile(LogLevel.VERBOSE, message);
   }
 
@@ -99,7 +116,7 @@ class Logger {
     if (!this.shouldLog(LogLevel.INFO)) return;
 
     const formattedMessage = this.formatMessage(LogLevel.INFO, message);
-    console.log(chalk.green(formattedMessage));
+    console.log(this.chalk.green(formattedMessage));
     this.writeToFile(LogLevel.INFO, message);
   }
 
@@ -107,7 +124,7 @@ class Logger {
     if (!this.shouldLog(LogLevel.INFO)) return;
 
     const formattedMessage = this.formatMessage(LogLevel.INFO, message);
-    console.log(chalk.yellow(formattedMessage));
+    console.log(this.chalk.yellow(formattedMessage));
     this.writeToFile(LogLevel.INFO, message);
   }
 
@@ -119,7 +136,7 @@ class Logger {
     const message = `${label}: ${progressBar} ${current}/${total} (${percentage}%)`;
     
     // Clear line and write progress
-    process.stdout.write(`\r${chalk.cyan(message)}`);
+    process.stdout.write(`\r${this.chalk.cyan(message)}`);
     
     if (current === total) {
       process.stdout.write('\n');

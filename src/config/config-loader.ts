@@ -4,7 +4,6 @@ import { z } from 'zod';
 import * as dotenv from 'dotenv';
 import { 
   PlaylistConfig, 
-  PlaylistRule, 
   VideoProcessingConfig 
 } from '../types/api-types';
 import { getLogger } from '../utils/logger';

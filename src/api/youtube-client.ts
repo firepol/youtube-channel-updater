@@ -1,14 +1,12 @@
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import * as fs from 'fs-extra';
-import * as path from 'path';
 import { 
   YouTubeVideo, 
   YouTubePlaylist, 
   YouTubePlaylistItem, 
   YouTubeChannel,
   YouTubeApiResponse,
-  YouTubeApiError,
   RateLimitInfo
 } from '../types/api-types';
 import { getLogger, logVerbose } from '../utils/logger';
