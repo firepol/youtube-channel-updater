@@ -1,7 +1,7 @@
-import fs from 'fs-extra';
-import path from 'path';
+import * as fs from 'fs-extra';
+import * as path from 'path';
 import { z } from 'zod';
-import dotenv from 'dotenv';
+import * as dotenv from 'dotenv';
 import { 
   PlaylistConfig, 
   PlaylistRule, 
@@ -184,11 +184,35 @@ export class ConfigLoader {
     try {
       if (await fs.pathExists(configPath)) {
         const configData = await fs.readJson(configPath);
-        return PlaylistConfigSchema.parse(configData);
+        
+        // Fail-fast validation: Check all playlists have required fields
+        if (Array.isArray(configData.playlists)) {
+          for (let i = 0; i < configData.playlists.length; i++) {
+            const playlist = configData.playlists[i];
+            const errors: string[] = [];
+            
+            if (!playlist.id || typeof playlist.id !== 'string') {
+              errors.push('id (required string)');
+            }
+            if (!playlist.title || typeof playlist.title !== 'string') {
+              errors.push('title (required string)');
+            }
+            if (!Array.isArray(playlist.keywords) || playlist.keywords.length === 0) {
+              errors.push('keywords (required non-empty array)');
+            }
+            
+            if (errors.length > 0) {
+              throw new Error(`Playlist at index ${i} is missing required fields: ${errors.join(', ')}`);
+            }
+          }
+        }
+        
+        // After validation, we know all required fields are present
+        return PlaylistConfigSchema.parse(configData) as PlaylistConfig;
       } else {
         // Return default empty configuration
         getLogger().warning('Playlist configuration file not found, using empty configuration');
-        return { playlists: [] };
+        return PlaylistConfigSchema.parse({ playlists: [] }) as PlaylistConfig;
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -208,7 +232,38 @@ export class ConfigLoader {
     try {
       if (await fs.pathExists(configPath)) {
         const configData = await fs.readJson(configPath);
-        return VideoProcessingConfigSchema.parse(configData);
+        
+        // Fail-fast validation: Check all required fields are present
+        const errors: string[] = [];
+        
+        if (!configData.titleTransform?.pattern || typeof configData.titleTransform.pattern !== 'string') {
+          errors.push('titleTransform.pattern (required string)');
+        }
+        if (!configData.titleTransform?.replacement || typeof configData.titleTransform.replacement !== 'string') {
+          errors.push('titleTransform.replacement (required string)');
+        }
+        if (!configData.descriptionTransform?.pattern || typeof configData.descriptionTransform.pattern !== 'string') {
+          errors.push('descriptionTransform.pattern (required string)');
+        }
+        if (!configData.descriptionTransform?.replacement || typeof configData.descriptionTransform.replacement !== 'string') {
+          errors.push('descriptionTransform.replacement (required string)');
+        }
+        if (!Array.isArray(configData.baseTags)) {
+          errors.push('baseTags (required array)');
+        }
+        if (typeof configData.maxDynamicTags !== 'number' || configData.maxDynamicTags < 1) {
+          errors.push('maxDynamicTags (required positive number)');
+        }
+        if (!configData.metadataVersion || typeof configData.metadataVersion !== 'string') {
+          errors.push('metadataVersion (required string)');
+        }
+        
+        if (errors.length > 0) {
+          throw new Error(`Video processing configuration is missing required fields: ${errors.join(', ')}`);
+        }
+        
+        // After validation, we know all required fields are present
+        return VideoProcessingConfigSchema.parse(configData) as VideoProcessingConfig;
       } else {
         // Return default configuration
         getLogger().warning('Video processing configuration file not found, using default configuration');
@@ -334,4 +389,10 @@ export class ConfigLoader {
   getConfig(): AppConfig | null {
     return this.config;
   }
+}
+
+// Convenience function to load configuration
+export async function loadConfig(): Promise<AppConfig> {
+  const loader = new ConfigLoader();
+  return await loader.loadConfig();
 } 
