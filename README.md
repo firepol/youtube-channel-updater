@@ -72,17 +72,23 @@ Automate the management of YouTube video metadata and playlist organization for 
 
 ### Initial Setup
 
-1. **Build video database**
+1. **Get your channel ID** (if you don't have it)
+   ```bash
+   npm run get-channel-id -- --handle your_handle
+   # Example: npm run get-channel-id -- --handle skypaul77
+   ```
+
+2. **Build video database**
    ```bash
    npm run build:video-db
    ```
 
-2. **Discover playlists**
+3. **Discover playlists**
    ```bash
    npm run discover-playlists
    ```
 
-3. **Build playlist content**
+4. **Build playlist content**
    ```bash
    npm run build-playlists
    ```
@@ -108,6 +114,30 @@ Automate the management of YouTube video metadata and playlist organization for 
    ```bash
    npm run update-videos
    ```
+
+## Finding Your Channel ID
+
+If you don't know your YouTube channel ID, use the channel discovery script:
+
+```bash
+# Using npm script (recommended)
+npm run get-channel-id -- --handle your_channel_handle
+
+# Or using tsx directly
+npx tsx scripts/get-channel-id.ts --handle your_channel_handle
+```
+
+**Examples:**
+- `npm run get-channel-id -- --handle skypaul77`
+- `npm run get-channel-id -- --handle @skypaul77`
+
+The script will:
+- Search for your channel by handle
+- Display channel information (title, subscribers, videos, etc.)
+- Save the channel ID to `data/channel-info.json`
+- Work even if your channel doesn't have a custom URL set up
+
+**Note**: You only need your API key for this operation - OAuth credentials are not required.
 
 ## Project Structure
 

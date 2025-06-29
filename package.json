@@ -11,6 +11,7 @@
     "test:watch": "vitest --watch",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
+    "get-channel-id": "tsx scripts/get-channel-id.ts",
     "build:video-db": "tsx scripts/build-video-database.ts",
     "discover-playlists": "tsx scripts/discover-playlists.ts",
     "build-playlists": "tsx scripts/build-playlist-content.ts",

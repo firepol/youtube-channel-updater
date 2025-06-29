@@ -25,9 +25,11 @@ class Logger {
     this.initializeChalk();
   }
 
-  private async initializeChalk(): Promise<void> {
+  private initializeChalk(): void {
     try {
-      this.chalk = (await import('chalk')).default;
+      // Try to load chalk synchronously first
+      const chalk = require('chalk');
+      this.chalk = chalk.default || chalk;
     } catch (error) {
       // Fallback to basic colors if chalk fails to load
       this.chalk = {

@@ -20,6 +20,9 @@ build/
 logs/
 *.log
 
+# Data storage (contains sensitive information)
+data/
+
 # Runtime data
 pids/
 *.pid
