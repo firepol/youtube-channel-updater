@@ -229,7 +229,56 @@ export class YouTubeClient {
   }
 
   /**
-   * Get videos from channel with pagination
+   * Get all videos from channel (including drafts) using uploads playlist
+   */
+  async getAllVideos(pageToken?: string, maxResults: number = 50): Promise<YouTubeApiResponse<YouTubeVideo>> {
+    return this.executeApiCall(
+      async () => {
+        // First, get the channel's uploads playlist ID
+        const channelResponse = await this.youtube.channels.list({
+          key: this.apiKey,
+          part: ['contentDetails'],
+          id: [this.channelId]
+        });
+
+        if (!channelResponse.data.items || channelResponse.data.items.length === 0) {
+          throw new Error(`Channel not found: ${this.channelId}`);
+        }
+
+        const uploadsPlaylistId = channelResponse.data.items[0].contentDetails?.relatedPlaylists?.uploads;
+        if (!uploadsPlaylistId) {
+          throw new Error('Uploads playlist not found for channel');
+        }
+
+        // Get videos from the uploads playlist (this includes all videos regardless of status)
+        const playlistResponse = await this.youtube.playlistItems.list({
+          key: this.apiKey,
+          part: ['snippet'],
+          playlistId: uploadsPlaylistId,
+          maxResults,
+          pageToken
+        });
+
+        // Get detailed video information for each video
+        const videoIds = playlistResponse.data.items?.map((item: any) => item.snippet?.resourceId?.videoId).filter(Boolean) || [];
+        const detailedVideos = await this.getVideoDetails(videoIds);
+
+        return {
+          kind: playlistResponse.data.kind || '',
+          etag: playlistResponse.data.etag || '',
+          nextPageToken: playlistResponse.data.nextPageToken,
+          prevPageToken: playlistResponse.data.prevPageToken,
+          pageInfo: playlistResponse.data.pageInfo || { totalResults: 0, resultsPerPage: 0 },
+          items: detailedVideos
+        };
+      },
+      2 + Math.ceil(maxResults / 50), // Channel + playlist + estimated video details cost
+      'getAllVideos'
+    );
+  }
+
+  /**
+   * Get videos from channel with pagination (published only - for backward compatibility)
    */
   async getVideos(pageToken?: string, maxResults: number = 50): Promise<YouTubeApiResponse<YouTubeVideo>> {
     return this.executeApiCall(

@@ -155,6 +155,8 @@
   - Track all metadata changes over time
   - Serve as source of truth for video information
 
+**Note**: The YouTube Data API v3 does not provide access to draft (unpublished) videos. Only videos that have been published (even as private or unlisted) are accessible via the API. Draft videos are only visible in YouTube Studio and cannot be fetched programmatically.
+
 ### Playlist Management System
 - **Playlist Files**: Individual JSON files per playlist in `data/playlists/` folder
 - **File Naming**: Playlist name sanitized (spaces → underscores, special chars removed)

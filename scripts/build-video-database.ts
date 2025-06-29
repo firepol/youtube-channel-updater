@@ -81,13 +81,25 @@ class VideoDatabaseBuilder {
    */
   private async loadState(): Promise<VideoDatabaseState> {
     try {
+      // First, try to load existing videos from the actual database file
+      if (await fs.pathExists(this.outputFile)) {
+        const existingVideos = await fs.readJson(this.outputFile) as LocalVideo[];
+        this.logger.info(`Loaded ${existingVideos.length} existing videos from database`);
+        return {
+          videos: existingVideos,
+          totalProcessed: existingVideos.length,
+          lastUpdated: new Date().toISOString()
+        };
+      }
+      
+      // If no database file exists, try to load from state file (for interrupted builds)
       if (await fs.pathExists(this.stateFile)) {
         const state = await fs.readJson(this.stateFile);
         this.logger.info(`Resuming from state: ${state.totalProcessed} videos processed`);
         return state;
       }
     } catch (error) {
-      this.logger.warning('Failed to load state file, starting fresh');
+      this.logger.warning('Failed to load existing data, starting fresh');
     }
 
     return {
@@ -120,7 +132,8 @@ class VideoDatabaseBuilder {
         }
         if (a.datetime && !b.datetime) return -1;
         if (!a.datetime && b.datetime) return 1;
-        return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+        // For videos without extracted dates, sort by lastUpdated (newest first)
+        return new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime();
       });
 
       await fs.writeJson(this.outputFile, sortedVideos, { spaces: 2 });
@@ -183,7 +196,7 @@ class VideoDatabaseBuilder {
       processingErrors: video.suggestions?.processingErrors,
       // Metadata tracking
       lastFetched: new Date().toISOString(),
-      lastUpdated: video.snippet?.publishedAt || '' // YouTube doesn't provide updatedAt, use publishedAt
+      lastUpdated: video.snippet?.publishedAt || '' // Use publishedAt as it reflects when the video was uploaded/created
     };
   }
 
@@ -195,15 +208,55 @@ class VideoDatabaseBuilder {
   }
 
   /**
+   * Check if an existing video has changes compared to YouTube data
+   */
+  private hasVideoChanges(existingVideo: LocalVideo, youtubeVideo: YouTubeVideo): boolean {
+    // Check for changes in key fields (excluding statistics as they change frequently)
+    const titleChanged = existingVideo.title !== (youtubeVideo.snippet?.title || '');
+    const descriptionChanged = existingVideo.description !== (youtubeVideo.snippet?.description || '');
+    const tagsChanged = JSON.stringify(existingVideo.tags || []) !== JSON.stringify(youtubeVideo.snippet?.tags || []);
+    const privacyStatusChanged = existingVideo.privacyStatus !== (youtubeVideo.status?.privacyStatus || 'private');
+    const madeForKidsChanged = existingVideo.madeForKids !== (youtubeVideo.status?.madeForKids || false);
+
+    return titleChanged || descriptionChanged || tagsChanged || privacyStatusChanged || madeForKidsChanged;
+  }
+
+  /**
+   * Update existing video with new data from YouTube
+   */
+  private updateExistingVideo(existingVideo: LocalVideo, youtubeVideo: YouTubeVideo): LocalVideo {
+    return {
+      ...existingVideo,
+      title: youtubeVideo.snippet?.title || existingVideo.title,
+      description: youtubeVideo.snippet?.description || existingVideo.description,
+      tags: youtubeVideo.snippet?.tags || existingVideo.tags,
+      privacyStatus: youtubeVideo.status?.privacyStatus || existingVideo.privacyStatus,
+      madeForKids: youtubeVideo.status?.madeForKids || existingVideo.madeForKids,
+      statistics: youtubeVideo.statistics || existingVideo.statistics,
+      lastFetched: new Date().toISOString(),
+      // Keep existing lastUpdated as it represents when YouTube last updated this video
+    };
+  }
+
+  /**
    * Build the video database
    */
   async buildDatabase(): Promise<void> {
     try {
       this.logger.info('Starting video database build...');
 
+      // Load existing videos from database
+      let existingVideos: LocalVideo[] = [];
+      if (await fs.pathExists(this.outputFile)) {
+        existingVideos = await fs.readJson(this.outputFile) as LocalVideo[];
+        this.logger.info(`Loaded ${existingVideos.length} existing videos from database`);
+      }
+
       // Load existing state
       const state = await this.loadState();
-      let currentVideos = [...state.videos];
+      let currentVideos = [...existingVideos]; // Start with existing videos
+      let newVideos: LocalVideo[] = []; // Track only new videos
+      let totalUpdatedVideos = 0; // Track total updated videos
       let pageToken = state.lastPageToken;
       let totalProcessed = state.totalProcessed;
 
@@ -223,8 +276,8 @@ class VideoDatabaseBuilder {
         this.logger.info(`Fetching page ${pageCount} (${totalProcessed} videos processed so far)`);
 
         try {
-          // Fetch videos from current page
-          const response = await this.youtubeClient.getVideos(pageToken, maxResults);
+          // Fetch videos from current page (including drafts)
+          const response = await this.youtubeClient.getAllVideos(pageToken, maxResults);
           
           if (!response.items || response.items.length === 0) {
             this.logger.info('No more videos found');
@@ -233,17 +286,53 @@ class VideoDatabaseBuilder {
 
           // Process videos from this page
           let newVideosCount = 0;
+          let updatedVideosCount = 0;
+          let foundDuplicate = false;
+          let hasChanges = false;
+          let oldestVideoChanged = false;
+          
           for (const video of response.items) {
-            if (!this.isVideoDuplicate(video.id, currentVideos)) {
+            const existingVideoIndex = currentVideos.findIndex(v => v.id === video.id);
+            
+            if (existingVideoIndex !== -1) {
+              // Video exists, check for changes
+              const existingVideo = currentVideos[existingVideoIndex];
+              if (this.hasVideoChanges(existingVideo, video)) {
+                // Update existing video with new data
+                currentVideos[existingVideoIndex] = this.updateExistingVideo(existingVideo, video);
+                updatedVideosCount++;
+                totalUpdatedVideos++;
+                hasChanges = true;
+                this.logger.info(`Updated video ${video.id} (${video.snippet?.title})`);
+                
+                // Check if this is the oldest video on this page (last in the array)
+                if (video === response.items[response.items.length - 1]) {
+                  oldestVideoChanged = true;
+                  this.logger.info(`Oldest video on page ${pageCount} has changes, will check next page`);
+                }
+              }
+              foundDuplicate = true;
+            } else {
+              // New video
               const localVideo = this.convertToLocalVideo(video);
               currentVideos.push(localVideo);
+              newVideos.push(localVideo);
               newVideosCount++;
+              totalProcessed++;
             }
-            totalProcessed++;
           }
 
-          this.logger.info(`Page ${pageCount}: Found ${response.items.length} videos, ${newVideosCount} new`);
+          this.logger.info(`Page ${pageCount}: Found ${response.items.length} videos, ${newVideosCount} new, ${updatedVideosCount} updated`);
           
+          // Smart page fetching logic:
+          // - If we found new videos, continue to next page
+          // - If we found changes in the oldest video of this page, continue to next page (changes might cascade)
+          // - If we found only changes in newer videos, stop here (no need to check older videos)
+          if (newVideosCount === 0 && !oldestVideoChanged) {
+            this.logger.info('No new videos and no changes in oldest video, stopping incremental update');
+            break;
+          }
+
           // Update progress
           this.logger.progress(totalProcessed, totalProcessed + (response.pageInfo.totalResults - totalProcessed), 'Videos Processed');
 
@@ -280,7 +369,7 @@ class VideoDatabaseBuilder {
 
       } while (pageToken);
 
-      // Save final database
+      // Save final database with all videos (existing + new)
       await this.saveVideos(currentVideos);
 
       // Clean up state file
@@ -291,7 +380,7 @@ class VideoDatabaseBuilder {
         this.logger.warning('Failed to clean up state file');
       }
 
-      this.logger.success(`Video database build completed! Total videos: ${currentVideos.length}`);
+      this.logger.success(`Video database build completed! Total videos: ${currentVideos.length} (added ${newVideos.length} new, updated ${totalUpdatedVideos})`);
       
       // Log statistics
       const withDates = currentVideos.filter(v => v.datetime).length;
