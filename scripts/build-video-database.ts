@@ -31,11 +31,18 @@ class VideoDatabaseBuilder {
    */
   async initialize(): Promise<void> {
     try {
+      // Initialize logger first with default settings
+      this.logger = initializeLogger({
+        verbose: process.env.VERBOSE === 'true',
+        logLevel: LogLevel.INFO,
+        logsDir: 'logs'
+      });
+
       // Load configuration
       const configLoader = new ConfigLoader();
       this.config = await configLoader.loadConfig();
 
-      // Initialize logger
+      // Re-initialize logger with config settings
       this.logger = initializeLogger({
         verbose: this.config.app.verbose,
         logLevel: this.config.app.logLevel as LogLevel,

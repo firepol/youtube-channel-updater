@@ -145,10 +145,21 @@ export class ConfigLoader {
         videoProcessing
       };
 
-      getLogger().info('Configuration loaded successfully');
+      // Safe logger call - don't fail if logger isn't initialized yet
+      try {
+        getLogger().info('Configuration loaded successfully');
+      } catch (error) {
+        // Logger not initialized yet, that's okay
+      }
       return this.config;
     } catch (error) {
-      getLogger().error('Failed to load configuration', error as Error);
+      // Safe logger call - don't fail if logger isn't initialized yet
+      try {
+        getLogger().error('Failed to load configuration', error as Error);
+      } catch (loggerError) {
+        // Logger not initialized yet, use console as fallback
+        console.error('Failed to load configuration:', error);
+      }
       throw error;
     }
   }
@@ -210,7 +221,11 @@ export class ConfigLoader {
         return PlaylistConfigSchema.parse(configData) as PlaylistConfig;
       } else {
         // Return default empty configuration
-        getLogger().warning('Playlist configuration file not found, using empty configuration');
+        try {
+          getLogger().warning('Playlist configuration file not found, using empty configuration');
+        } catch (error) {
+          // Logger not initialized yet, that's okay
+        }
         return PlaylistConfigSchema.parse({ playlists: [] }) as PlaylistConfig;
       }
     } catch (error) {
@@ -265,7 +280,11 @@ export class ConfigLoader {
         return VideoProcessingConfigSchema.parse(configData) as VideoProcessingConfig;
       } else {
         // Return default configuration
-        getLogger().warning('Video processing configuration file not found, using default configuration');
+        try {
+          getLogger().warning('Video processing configuration file not found, using default configuration');
+        } catch (error) {
+          // Logger not initialized yet, that's okay
+        }
         return this.getDefaultVideoProcessingConfig();
       }
     } catch (error) {
