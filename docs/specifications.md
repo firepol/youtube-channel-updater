@@ -508,6 +508,8 @@ VERBOSE=true
 }
 ```
 
+**Note**: The YouTube Data API v3 does not provide actual video resolution (width/height in pixels). The `definition` field indicates quality level ("hd", "sd") but not specific dimensions. The `contentDetails.dimension` field only indicates whether the video is 2D or 3D content.
+
 ### History Structure (data/history.json)
 ```json
 {
