@@ -3,7 +3,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { YouTubeClient } from '../src/api/youtube-client';
-import { ConfigLoader } from '../src/config/config-loader';
+import { ConfigLoader, AppConfig } from '../src/config/config-loader';
 import { initializeLogger, LogLevel } from '../src/utils/logger';
 import { LocalVideo, YouTubeVideo } from '../src/types/api-types';
 
@@ -23,7 +23,7 @@ interface CommandLineArgs {
 
 class VideoDatabaseBuilder {
   private youtubeClient!: YouTubeClient;
-  private config: any;
+  private config!: Pick<AppConfig, 'youtube' | 'app' | 'rateLimiting' | 'paths'>;
   private logger: any;
   private stateFile: string;
   private outputFile: string;
@@ -51,7 +51,7 @@ class VideoDatabaseBuilder {
 
       // Load configuration
       const configLoader = new ConfigLoader();
-      this.config = await configLoader.loadConfig();
+      this.config = await configLoader.loadBasicConfig();
 
       // Re-initialize logger with config settings
       this.logger = initializeLogger({
