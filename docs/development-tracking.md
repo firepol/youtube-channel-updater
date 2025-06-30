@@ -99,7 +99,13 @@
   - [x] **Fallback Strategy**: Added requirement to use API key for public-only access when OAuth not available
   - [x] **Video Fetching Strategy**: Added `mine: true` parameter usage when authenticated as channel owner
   - [x] **Enhanced Output**: Added privacy status tracking and authentication method logging
-- **Notes**: Successfully built video database with 1,234 videos from channel. **IMPORTANT**: Current implementation uses API key only, limiting access to public videos. OAuth 2.0 authentication is required to access unlisted and private videos. The `setup-oauth.ts` script is already available for OAuth setup.
+- **Enhanced Script Features Added** (2025-06-29 21:15:30):
+  - [x] **Flexible Channel Support**: Can fetch videos from any YouTube channel via `--channel-id` parameter
+  - [x] **Custom Output Files**: Can specify output file via `--output` parameter to avoid conflicts
+  - [x] **Smart Authentication**: Automatic fallback between OAuth 2.0 and API key based on availability
+  - [x] **Command-Line Interface**: Added `--help`, `--use-oauth`, `--channel-id`, `--output` options
+  - [x] **Use Cases**: Support for own channel management, research, backup, and cross-channel analysis
+- **Notes**: Successfully built video database with 1,234 videos from channel. **IMPORTANT**: Current implementation uses API key only, limiting access to public videos. OAuth 2.0 authentication is required to access unlisted and private videos. The `setup-oauth.ts` script is already available for OAuth setup. **ENHANCED**: Script now supports fetching videos from any channel with flexible authentication options and clear command-line interface.
 
 ### 2.2 Playlist Discovery
 - **Status**: ✅ Complete

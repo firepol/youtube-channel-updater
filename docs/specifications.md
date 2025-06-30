@@ -460,3 +460,44 @@ VERBOSE=true
 - **Content Filters**: `category_id`, `license`, `definition`, `caption`, `default_language` (with `_not` variants)
 - **Text Filters**: `title/description/tags_contains/not_contains`
 - **Metadata Filters**: `
+```
+
+### Video Database Builder Script
+- **Script**: `scripts/build-video-database.ts` - Enhanced video database builder
+- **Default Behavior**: Uses channel ID from `.env` configuration
+- **Flexible Channel Support**: Can fetch videos from any YouTube channel
+- **Smart Authentication**: Automatic fallback between OAuth 2.0 and API key
+- **Command-Line Interface**: Supports various options and commands
+
+#### Command-Line Options
+```bash
+# Build database for your own channel (from .env)
+tsx scripts/build-video-database.ts
+
+# Build database for your own channel with OAuth (all videos)
+tsx scripts/build-video-database.ts --use-oauth
+
+# Fetch public videos from any channel
+tsx scripts/build-video-database.ts --channel-id <CHANNEL_ID> --output <FILE>
+
+# Fetch all videos from any channel (requires OAuth + channel access)
+tsx scripts/build-video-database.ts --channel-id <CHANNEL_ID> --output <FILE> --use-oauth
+
+# Resume interrupted build
+tsx scripts/build-video-database.ts resume
+
+# Clean up database files
+tsx scripts/build-video-database.ts clean
+```
+
+#### Authentication Behavior
+- **API Key Only**: Fetches public videos from any channel
+- **OAuth 2.0**: Fetches all videos (public, unlisted, private) if you have access
+- **Smart Fallback**: Automatically uses OAuth if available and requested, falls back to API key
+- **Access Control**: OAuth requires channel owner authentication or manager/editor access
+
+#### Use Cases
+- **Own Channel Management**: Default behavior for managing your own channel
+- **Research & Analysis**: Fetch public videos from any channel for analysis
+- **Backup & Archive**: Create backups of channel video databases
+- **Cross-Channel Comparison**: Compare video metadata across different channels

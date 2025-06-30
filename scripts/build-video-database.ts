@@ -14,16 +14,27 @@ interface VideoDatabaseState {
   lastUpdated: string;
 }
 
+interface CommandLineArgs {
+  channelId?: string;
+  outputFile?: string;
+  useOAuth?: boolean;
+  command?: string;
+}
+
 class VideoDatabaseBuilder {
   private youtubeClient!: YouTubeClient;
   private config: any;
   private logger: any;
   private stateFile: string;
   private outputFile: string;
+  private targetChannelId: string;
+  private useOAuth: boolean;
 
-  constructor() {
+  constructor(args: CommandLineArgs = {}) {
     this.stateFile = 'data/video-db-state.json';
-    this.outputFile = 'data/videos.json';
+    this.outputFile = args.outputFile || 'data/videos.json';
+    this.targetChannelId = args.channelId || '';
+    this.useOAuth = args.useOAuth || false;
   }
 
   /**
@@ -49,21 +60,51 @@ class VideoDatabaseBuilder {
         logsDir: this.config.paths.logsDir
       });
 
+      // Determine target channel ID
+      if (!this.targetChannelId) {
+        this.targetChannelId = this.config.youtube.channelId;
+        this.logger.info(`Using configured channel ID: ${this.targetChannelId}`);
+      } else {
+        this.logger.info(`Using specified channel ID: ${this.targetChannelId}`);
+      }
+
       // Initialize YouTube client
       this.youtubeClient = new YouTubeClient(
         this.config.youtube.apiKey,
         this.config.youtube.clientId,
         this.config.youtube.clientSecret,
-        this.config.youtube.channelId,
+        this.targetChannelId, // Use target channel ID
         this.config.rateLimiting.maxRetries,
         this.config.rateLimiting.retryDelayMs,
         this.config.rateLimiting.apiCallDelayMs
       );
 
-      // Load OAuth tokens if available
-      const tokensLoaded = await this.youtubeClient.loadTokens();
-      if (!tokensLoaded) {
-        this.logger.warning('OAuth tokens not found. Some operations may fail.');
+      // Load OAuth tokens if available and requested
+      let tokensLoaded = false;
+      if (this.useOAuth) {
+        tokensLoaded = await this.youtubeClient.loadTokens();
+        if (tokensLoaded) {
+          this.logger.info('OAuth tokens loaded successfully');
+        } else {
+          this.logger.warning('OAuth requested but tokens not found. Falling back to API key for public videos only.');
+          this.useOAuth = false;
+        }
+      } else {
+        // Try to load tokens anyway for potential use
+        tokensLoaded = await this.youtubeClient.loadTokens();
+        if (tokensLoaded) {
+          this.logger.info('OAuth tokens available (use --use-oauth to enable complete access)');
+        }
+      }
+
+      // Log authentication method and access level
+      if (this.useOAuth && tokensLoaded) {
+        this.logger.info('Using OAuth 2.0 authentication - attempting to fetch all videos (public, unlisted, private)');
+      } else {
+        this.logger.info('Using API key authentication - fetching public videos only');
+        if (this.targetChannelId !== this.config.youtube.channelId) {
+          this.logger.info('Note: For complete access to other channels, use --use-oauth (requires channel access)');
+        }
       }
 
       // Ensure data directory exists
@@ -276,8 +317,15 @@ class VideoDatabaseBuilder {
         this.logger.info(`Fetching page ${pageCount} (${totalProcessed} videos processed so far)`);
 
         try {
-          // Fetch videos from current page (including drafts)
-          const response = await this.youtubeClient.getAllVideos(pageToken, maxResults);
+          // Fetch videos from current page based on authentication method
+          let response;
+          if (this.useOAuth) {
+            // Use OAuth for complete access (public, unlisted, private)
+            response = await this.youtubeClient.getAllVideos(pageToken, maxResults);
+          } else {
+            // Use API key for public videos only
+            response = await this.youtubeClient.getVideos(pageToken, maxResults);
+          }
           
           if (!response.items || response.items.length === 0) {
             this.logger.info('No more videos found');
@@ -413,17 +461,84 @@ class VideoDatabaseBuilder {
       this.logger.error('Failed to clean up files', error as Error);
     }
   }
+
+  /**
+   * Show usage information
+   */
+  static showHelp(): void {
+    console.log(`
+YouTube Channel Video Database Builder
+
+Usage:
+  tsx scripts/build-video-database.ts [options] [command]
+
+Commands:
+  build     Build video database (default)
+  resume    Resume interrupted build
+  clean     Clean up database files
+
+Options:
+  --channel-id <ID>    Channel ID to fetch videos from (default: from .env)
+  --output <FILE>      Output file path (default: data/videos.json)
+  --use-oauth          Use OAuth 2.0 for complete access (public, unlisted, private)
+  --help               Show this help message
+
+Examples:
+  # Build database for your own channel (from .env)
+  tsx scripts/build-video-database.ts
+
+  # Build database for your own channel with OAuth (all videos)
+  tsx scripts/build-video-database.ts --use-oauth
+
+  # Fetch public videos from any channel
+  tsx scripts/build-video-database.ts --channel-id UCN8FkVLFVQCwMsFloU-KaAA --output other-channel.json
+
+  # Fetch all videos from any channel (requires OAuth + channel access)
+  tsx scripts/build-video-database.ts --channel-id UCN8FkVLFVQCwMsFloU-KaAA --output other-channel.json --use-oauth
+
+Authentication:
+  - API Key: Fetches public videos only (works for any channel)
+  - OAuth 2.0: Fetches all videos (public, unlisted, private) if you have access
+  - Use --use-oauth to enable OAuth authentication
+  - Run 'tsx scripts/setup-oauth.ts' to set up OAuth authentication
+`);
+  }
 }
 
 // Main execution
 async function main() {
-  const builder = new VideoDatabaseBuilder();
+  // Parse command line arguments first
+  const args: CommandLineArgs = {};
+  const argv = process.argv.slice(2);
+  
+  for (let i = 0; i < argv.length; i++) {
+    switch (argv[i]) {
+      case '--channel-id':
+        args.channelId = argv[++i];
+        break;
+      case '--output':
+        args.outputFile = argv[++i];
+        break;
+      case '--use-oauth':
+        args.useOAuth = true;
+        break;
+      case '--help':
+        VideoDatabaseBuilder.showHelp();
+        return;
+      case 'resume':
+      case 'clean':
+      case 'build':
+        args.command = argv[i];
+        break;
+    }
+  }
+
+  const builder = new VideoDatabaseBuilder(args);
   
   try {
     await builder.initialize();
 
-    const args = process.argv.slice(2);
-    const command = args[0];
+    const command = args.command || 'build';
 
     switch (command) {
       case 'resume':
