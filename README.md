@@ -379,6 +379,360 @@ npx tsx scripts/manage-playlists.ts [options]
    npm run manage-playlists -- --input processed-videos.json
    ```
 
+## File Structures
+
+### Input Files
+
+#### Video Database (`data/videos.json`)
+The main video database containing all videos from your channel:
+
+```json
+[
+  {
+    "id": "video_id_1",
+    "title": "Tom Clancy's The Division 2 2025 03 29   10 01 17 02 going rogue gone wrong",
+    "description": "Tom Clancy's The Division 2 2025 03 29   10 01 17 02",
+    "publishedAt": "2025-03-29T10:01:17Z",
+    "datetime": "2025.03.29 - 10.01.17.02",
+    "tags": ["gaming", "gameplay"],
+    "categoryId": "20",
+    "privacyStatus": "public",
+    "madeForKids": false,
+    "license": "youtube",
+    "recordingDate": "2025-03-29T10:01:17Z",
+    "lastProcessed": "2025-06-27T10:01:32Z",
+    "metadataVersion": "v1.1",
+    "uploadStatus": "processed",
+    "processingStatus": "succeeded",
+    "embeddable": true,
+    "publicStatsViewable": true,
+    "definition": "hd",
+    "caption": "false",
+    "defaultLanguage": "en",
+    "defaultAudioLanguage": "en",
+    "statistics": {
+      "viewCount": "1234",
+      "likeCount": "56",
+      "dislikeCount": "0",
+      "favoriteCount": "12",
+      "commentCount": "8"
+    },
+    "processingErrors": [],
+    "lastFetched": "2025-06-29T16:52:45Z",
+    "lastUpdated": "2025-06-29T16:52:45Z"
+  }
+]
+```
+
+#### Filtered Videos Input (for `process-videos.ts`)
+A subset of videos from the database, typically created by `filter-videos.ts`:
+
+```json
+[
+  {
+    "id": "video_id_1",
+    "title": "Tom Clancy's The Division 2 2025 03 29   10 01 17 02 going rogue gone wrong",
+    "description": "Tom Clancy's The Division 2 2025 03 29   10 01 17 02",
+    "publishedAt": "2025-03-29T10:01:17Z",
+    "recordingDate": "2025-03-29T10:01:17Z",
+    "tags": ["gaming", "gameplay"],
+    "categoryId": "20",
+    "privacyStatus": "public",
+    "madeForKids": false,
+    "license": "youtube"
+  }
+]
+```
+
+#### Processed Videos Input (for `manage-playlists.ts`)
+Videos that have been processed and need playlist assignment:
+
+```json
+[
+  {
+    "id": "video_id_1",
+    "title": "DZ going rogue gone wrong / The Division 2 / 2025-03-29",
+    "description": "Tom Clancy's The Division 2 / 2025-03-29 10:01 [metadata v1.1: proc_20250627_100132]",
+    "publishedAt": "2025-03-29T10:01:17Z",
+    "recordingDate": "2025-03-29T10:01:17Z",
+    "tags": ["The Division 2", "Gaming", "Gameplay", "Dark Zone"],
+    "categoryId": "20",
+    "privacyStatus": "public",
+    "madeForKids": false,
+    "license": "creativeCommon"
+  }
+]
+```
+
+### Output Files
+
+#### Processing Results (`processing-results-YYYY-MM-DD.json`)
+Results from video processing operations:
+
+```json
+{
+  "processedVideos": 45,
+  "successfulUpdates": 43,
+  "failedUpdates": 2,
+  "errors": [
+    {
+      "videoId": "video_id_1",
+      "error": "Rate limit exceeded",
+      "attempts": 3
+    }
+  ],
+  "processingTime": "00:05:30",
+  "dryRunMode": false,
+  "previewReport": null
+}
+```
+
+#### Playlist Results (`playlist-results-YYYY-MM-DD.json`)
+Results from playlist management operations:
+
+```json
+{
+  "processedVideos": 45,
+  "playlistAssignments": [
+    {
+      "videoId": "video_id_1",
+      "title": "DZ going rogue gone wrong / The Division 2 / 2025-03-29",
+      "assignedPlaylists": [
+        {
+          "playlistId": "playlist_id_1",
+          "playlistTitle": "Dark Zone",
+          "position": 15,
+          "status": "success"
+        }
+      ]
+    }
+  ],
+  "totalAssignments": 67,
+  "successfulAssignments": 65,
+  "failedAssignments": 2,
+  "processingTime": "00:03:45",
+  "dryRunMode": false,
+  "previewReport": null
+}
+```
+
+#### Dry-Run Preview Reports
+Comprehensive preview reports when using `--dry-run --output`:
+
+**Video Processing Preview** (`process-videos.ts`):
+```json
+{
+  "mode": "dry-run",
+  "timestamp": "2025-06-29T17:15:30.123Z",
+  "summary": {
+    "videosToProcess": 45,
+    "estimatedApiQuota": 2250,
+    "processingTime": "00:02:30",
+    "validationStatus": "valid"
+  },
+  "steps": {
+    "validation": {
+      "status": "completed",
+      "configValid": true,
+      "dataIntegrity": true,
+      "apiQuotaAvailable": true,
+      "authenticationValid": true
+    },
+    "processing": {
+      "status": "completed",
+      "videosToUpdate": 45,
+      "estimatedQuota": 2250
+    }
+  },
+  "preview": [
+    {
+      "videoId": "video_id_1",
+      "currentState": {
+        "title": "Tom Clancy's The Division 2 2025 03 29   10 01 17 02 going rogue gone wrong",
+        "description": "Tom Clancy's The Division 2 2025 03 29   10 01 17 02",
+        "tags": ["gaming", "gameplay"],
+        "recordingDate": "2025-03-29T10:01:17Z",
+        "metadataVersion": null
+      },
+      "proposedState": {
+        "title": "DZ going rogue gone wrong / The Division 2 / 2025-03-29",
+        "description": "Tom Clancy's The Division 2 / 2025-03-29 10:01 [metadata v1.1: proc_20250627_100132]",
+        "tags": ["The Division 2", "Gaming", "Gameplay", "Dark Zone"],
+        "recordingDate": "2025-03-29T10:01:17Z",
+        "metadataVersion": "[metadata v1.1: proc_20250627_100132]"
+      },
+      "changes": {
+        "titleChanged": true,
+        "descriptionChanged": true,
+        "tagsChanged": true,
+        "recordingDateChanged": false,
+        "metadataVersionAdded": true
+      },
+      "validation": {
+        "titleValid": true,
+        "descriptionValid": true,
+        "tagsValid": true,
+        "warnings": [],
+        "errors": []
+      }
+    }
+  ],
+  "validation": {
+    "configValid": true,
+    "dataIntegrity": true,
+    "apiQuotaAvailable": true,
+    "authenticationValid": true,
+    "warnings": [],
+    "errors": []
+  },
+  "costEstimate": {
+    "totalApiCalls": 45,
+    "quotaUnitsRequired": 2250,
+    "dailyQuotaImpact": 22.5,
+    "processingTimeEstimate": "00:05:30",
+    "resourceRequirements": {
+      "memory": "~50MB",
+      "storage": "~2MB"
+    }
+  }
+}
+```
+
+**Playlist Management Preview** (`manage-playlists.ts`):
+```json
+{
+  "mode": "dry-run",
+  "timestamp": "2025-06-29T17:15:30.123Z",
+  "summary": {
+    "videosToProcess": 45,
+    "estimatedApiQuota": 1350,
+    "playlistAssignments": 27,
+    "processingTime": "00:01:30",
+    "validationStatus": "valid"
+  },
+  "steps": {
+    "validation": {
+      "status": "completed",
+      "configValid": true,
+      "dataIntegrity": true,
+      "apiQuotaAvailable": true,
+      "authenticationValid": true
+    },
+    "playlistMatching": {
+      "status": "completed",
+      "playlistsToUpdate": 10,
+      "assignmentsToMake": 27
+    }
+  },
+  "preview": [
+    {
+      "videoId": "video_id_1",
+      "title": "DZ going rogue gone wrong / The Division 2 / 2025-03-29",
+      "currentState": {
+        "playlists": []
+      },
+      "proposedState": {
+        "playlists": [
+          {
+            "playlistId": "playlist_id_1",
+            "playlistTitle": "Dark Zone",
+            "position": 15
+          },
+          {
+            "playlistId": "playlist_id_2",
+            "playlistTitle": "The Division 2",
+            "position": 23
+          }
+        ]
+      },
+      "changes": {
+        "playlistsChanged": true,
+        "newPlaylists": ["Dark Zone", "The Division 2"],
+        "removedPlaylists": []
+      },
+      "validation": {
+        "positionValid": true,
+        "playlistValid": true,
+        "warnings": [],
+        "errors": []
+      }
+    }
+  ],
+  "validation": {
+    "configValid": true,
+    "dataIntegrity": true,
+    "apiQuotaAvailable": true,
+    "authenticationValid": true,
+    "warnings": [],
+    "errors": []
+  },
+  "costEstimate": {
+    "totalApiCalls": 27,
+    "quotaUnitsRequired": 1350,
+    "dailyQuotaImpact": 13.5,
+    "processingTimeEstimate": "00:03:30",
+    "resourceRequirements": {
+      "memory": "~30MB",
+      "storage": "~1MB"
+    }
+  }
+}
+```
+
+### Testing Workflow with Dry-Run
+
+1. **Preview video processing**:
+   ```bash
+   # Filter videos that need processing
+   npm run filter-videos -- --needs-processing true > videos-to-process.json
+   
+   # Preview what would be changed
+   npm run process-videos -- --input videos-to-process.json --dry-run --output preview-videos.json
+   
+   # Review the preview report
+   cat preview-videos.json
+   ```
+
+2. **Preview playlist assignments**:
+   ```bash
+   # Use processed videos for playlist assignment
+   npm run manage-playlists -- --input videos-to-process.json --dry-run --output preview-playlists.json
+   
+   # Review the preview report
+   cat preview-playlists.json
+   ```
+
+3. **Run actual processing** (after reviewing previews):
+   ```bash
+   # Process videos for real
+   npm run process-videos -- --input videos-to-process.json
+   
+   # Assign to playlists for real
+   npm run manage-playlists -- --input videos-to-process.json
+   ```
+
+### Validation in Dry-Run Reports
+
+The dry-run reports include comprehensive validation:
+
+- **Configuration Validation**: Checks all config files and settings
+- **Data Integrity**: Validates video database and required fields
+- **API Quota**: Estimates usage and checks daily limits
+- **Authentication**: Confirms OAuth tokens are valid
+- **Individual Video Validation**: Checks title/description length, tag limits, etc.
+
+### Cost Estimation
+
+Dry-run reports provide detailed cost estimates:
+
+- **API Calls**: Number of API calls required
+- **Quota Units**: Total quota units needed
+- **Daily Impact**: Percentage of daily quota limit
+- **Processing Time**: Estimated duration
+- **Resource Requirements**: Memory and storage needs
+
+This allows you to plan your operations and avoid exceeding API limits.
+
 ## Project Structure
 
 ```
