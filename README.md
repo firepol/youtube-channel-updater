@@ -68,6 +68,36 @@ Automate the management of YouTube video metadata and playlist organization for 
    }
    ```
 
+### OAuth 2.0 Setup (Optional)
+
+For complete access to all videos (including unlisted and private), set up OAuth 2.0 authentication:
+
+```bash
+# Set up OAuth 2.0 authentication
+npx tsx scripts/setup-oauth.ts
+
+# Test OAuth authentication
+npx tsx scripts/setup-oauth.ts test
+```
+
+**What OAuth 2.0 enables**:
+- Access to all videos (public, unlisted, private) from your own channels
+- Access to all videos from channels where you're a manager/editor
+- Write operations (updating videos, playlists)
+
+**What API Key only enables**:
+- Access to public videos from any channel
+- Read operations (viewing videos, playlists)
+
+**Setup Process**:
+1. Run the setup script
+2. Open the provided URL in your browser
+3. Authorize the application
+4. Copy the authorization code back to the terminal
+5. Tokens are automatically saved to `token.json`
+
+**Note**: OAuth setup is optional. Most operations work with API key only, but OAuth provides complete access when needed.
+
 ## Scripts Documentation
 
 ### 1. Channel ID Discovery
@@ -103,14 +133,14 @@ npx tsx scripts/get-channel-id.ts --handle your_channel_handle
 
 **Script**: `scripts/build-video-database.ts`
 
-Build a local database of all videos from your YouTube channel.
+Build a local database of all videos from your YouTube channel or any other channel.
 
 ```bash
 # Using npm script (recommended)
-npm run build:video-db [command]
+npm run build:video-db [options] [command]
 
 # Or using tsx directly
-npx tsx scripts/build-video-database.ts [command]
+npx tsx scripts/build-video-database.ts [options] [command]
 ```
 
 **Commands**:
@@ -118,20 +148,57 @@ npx tsx scripts/build-video-database.ts [command]
 - `resume` - Resume interrupted build
 - `clean` - Clean up database files and start fresh
 
+**Options**:
+- `--channel-id <ID>` - Channel ID to fetch videos from (default: from .env)
+- `--output <FILE>` - Output file path (default: data/videos.json)
+- `--use-oauth` - Use OAuth 2.0 for complete access (public, unlisted, private)
+- `--help` - Show help message
+
 **Examples**:
-- `npm run build:video-db` - Build database
-- `npm run build:video-db resume` - Resume interrupted build
-- `npm run build:video-db clean` - Clean up files
+```bash
+# Your own channel (from .env) - API key only (public videos)
+npm run build:video-db
+
+# Your own channel (from .env) - OAuth (all videos)
+npm run build:video-db -- --use-oauth
+
+# Any channel - API key only (public videos)
+npm run build:video-db -- --channel-id UCN8FkVLFVQCwMsFloU-KaAA --output other-channel.json
+
+# Any channel - OAuth (all videos if you have access)
+npm run build:video-db -- --channel-id UCN8FkVLFVQCwMsFloU-KaAA --output other-channel.json --use-oauth
+
+# Resume interrupted build
+npm run build:video-db resume
+
+# Clean up database files
+npm run build:video-db clean
+```
 
 **Features**:
-- Paginated fetching with resume capability
-- Duplicate prevention
-- Progress tracking
-- Rate limit awareness
-- Extracts datetime from titles/descriptions
-- Saves to `data/videos.json`
+- **Flexible Channel Support**: Fetch videos from your own channel or any other channel
+- **Smart Authentication**: Automatic fallback between OAuth 2.0 and API key
+- **Paginated fetching** with resume capability
+- **Duplicate prevention**
+- **Progress tracking**
+- **Rate limit awareness**
+- **Extracts datetime** from titles/descriptions
+- **Custom output files** to avoid conflicts
+- **Comprehensive help system**
 
-**Note**: This is the foundation for all other operations. Run this first!
+**Authentication Behavior**:
+- **API Key Only**: Fetches public videos from any channel (no OAuth required)
+- **OAuth 2.0**: Fetches all videos (public, unlisted, private) if you have channel access
+- **Smart Fallback**: Automatically uses OAuth if available and requested, falls back to API key
+- **Access Control**: OAuth requires channel owner authentication or manager/editor access
+
+**Use Cases**:
+- **Own Channel Management**: Default behavior for managing your own channel
+- **Research & Analysis**: Fetch public videos from any channel for analysis
+- **Backup & Archive**: Create backups of channel video databases
+- **Cross-Channel Comparison**: Compare video metadata across different channels
+
+**Note**: This is the foundation for all other operations. Run this first! For complete access to unlisted/private videos, use OAuth authentication.
 
 ### 3. Playlist Discovery
 
