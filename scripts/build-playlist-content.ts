@@ -120,7 +120,7 @@ class PlaylistContentBuilder {
       const playlistData = await fs.readJson(playlistFile) as LocalPlaylist;
       const playlistId = playlistData.id;
 
-      this.logger.info(`Building content for playlist: ${playlistData.title} (${playlistData.itemCount} items)`);
+      this.logger.info(`Building content for playlist: ${playlistData.title} (stored: ${playlistData.itemCount} items, current: ${playlistData.items?.length || 0} items)`);
 
       const playlistItems: LocalPlaylistItem[] = [];
       let pageToken: string | undefined;
