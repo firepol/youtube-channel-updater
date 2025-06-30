@@ -229,52 +229,111 @@ export class YouTubeClient {
   }
 
   /**
-   * Get all videos from channel (including drafts) using uploads playlist
+   * Get all videos from channel (including unlisted/private) if authenticated, else public only
    */
   async getAllVideos(pageToken?: string, maxResults: number = 50): Promise<YouTubeApiResponse<YouTubeVideo>> {
-    return this.executeApiCall(
-      async () => {
-        // First, get the channel's uploads playlist ID
-        const channelResponse = await this.youtube.channels.list({
-          key: this.apiKey,
-          part: ['contentDetails'],
-          id: [this.channelId]
-        });
+    if (this.isAuthenticated()) {
+      // Use OAuth: get all videos via uploads playlist with OAuth auth
+      return this.executeApiCall(
+        async () => {
+          logVerbose('Using OAuth with uploads playlist to fetch all videos');
 
-        if (!channelResponse.data.items || channelResponse.data.items.length === 0) {
-          throw new Error(`Channel not found: ${this.channelId}`);
-        }
+          // First, get the channel's uploads playlist ID using OAuth
+          const channelResponse = await this.youtube.channels.list({
+            auth: this.oauth2Client,
+            part: ['snippet', 'contentDetails'],
+            mine: true
+          });
 
-        const uploadsPlaylistId = channelResponse.data.items[0].contentDetails?.relatedPlaylists?.uploads;
-        if (!uploadsPlaylistId) {
-          throw new Error('Uploads playlist not found for channel');
-        }
+          if (!channelResponse.data.items || channelResponse.data.items.length === 0) {
+            throw new Error('No channel found for authenticated user');
+          }
 
-        // Get videos from the uploads playlist (this includes all videos regardless of status)
-        const playlistResponse = await this.youtube.playlistItems.list({
-          key: this.apiKey,
-          part: ['snippet'],
-          playlistId: uploadsPlaylistId,
-          maxResults,
-          pageToken
-        });
+          const channel = channelResponse.data.items[0];
+          logVerbose(`Authenticated as channel: ${channel.snippet?.title} (ID: ${channel.id})`);
 
-        // Get detailed video information for each video
-        const videoIds = playlistResponse.data.items?.map((item: any) => item.snippet?.resourceId?.videoId).filter(Boolean) || [];
-        const detailedVideos = await this.getVideoDetails(videoIds);
+          const uploadsPlaylistId = channel.contentDetails?.relatedPlaylists?.uploads;
+          if (!uploadsPlaylistId) {
+            throw new Error('Uploads playlist not found for channel');
+          }
 
-        return {
-          kind: playlistResponse.data.kind || '',
-          etag: playlistResponse.data.etag || '',
-          nextPageToken: playlistResponse.data.nextPageToken,
-          prevPageToken: playlistResponse.data.prevPageToken,
-          pageInfo: playlistResponse.data.pageInfo || { totalResults: 0, resultsPerPage: 0 },
-          items: detailedVideos
-        };
-      },
-      2 + Math.ceil(maxResults / 50), // Channel + playlist + estimated video details cost
-      'getAllVideos'
-    );
+          logVerbose(`Using uploads playlist: ${uploadsPlaylistId}`);
+
+          // Get videos from the uploads playlist using OAuth (this includes all videos: public, unlisted, private)
+          const playlistResponse = await this.youtube.playlistItems.list({
+            auth: this.oauth2Client,
+            part: ['snippet'],
+            playlistId: uploadsPlaylistId,
+            maxResults,
+            pageToken
+          });
+
+          logVerbose(`Uploads playlist returned ${playlistResponse.data.items?.length || 0} videos`);
+
+          // Get detailed video information for each video
+          const videoIds = playlistResponse.data.items?.map((item: any) => item.snippet?.resourceId?.videoId).filter(Boolean) || [];
+          logVerbose(`Getting details for ${videoIds.length} videos`);
+          const detailedVideos = await this.getVideoDetails(videoIds);
+          logVerbose(`Retrieved details for ${detailedVideos.length} videos`);
+
+          return {
+            kind: playlistResponse.data.kind || '',
+            etag: playlistResponse.data.etag || '',
+            nextPageToken: playlistResponse.data.nextPageToken,
+            prevPageToken: playlistResponse.data.prevPageToken,
+            pageInfo: playlistResponse.data.pageInfo || { totalResults: 0, resultsPerPage: 0 },
+            items: detailedVideos
+          };
+        },
+        2 + Math.ceil(maxResults / 50), // Channel + playlist + estimated video details cost
+        'getAllVideos (OAuth)'
+      );
+    } else {
+      // Use API key: uploads playlist (public videos only)
+      return this.executeApiCall(
+        async () => {
+          // First, get the channel's uploads playlist ID
+          const channelResponse = await this.youtube.channels.list({
+            key: this.apiKey,
+            part: ['contentDetails'],
+            id: [this.channelId]
+          });
+
+          if (!channelResponse.data.items || channelResponse.data.items.length === 0) {
+            throw new Error(`Channel not found: ${this.channelId}`);
+          }
+
+          const uploadsPlaylistId = channelResponse.data.items[0].contentDetails?.relatedPlaylists?.uploads;
+          if (!uploadsPlaylistId) {
+            throw new Error('Uploads playlist not found for channel');
+          }
+
+          // Get videos from the uploads playlist (this includes all public videos)
+          const playlistResponse = await this.youtube.playlistItems.list({
+            key: this.apiKey,
+            part: ['snippet'],
+            playlistId: uploadsPlaylistId,
+            maxResults,
+            pageToken
+          });
+
+          // Get detailed video information for each video
+          const videoIds = playlistResponse.data.items?.map((item: any) => item.snippet?.resourceId?.videoId).filter(Boolean) || [];
+          const detailedVideos = await this.getVideoDetails(videoIds);
+
+          return {
+            kind: playlistResponse.data.kind || '',
+            etag: playlistResponse.data.etag || '',
+            nextPageToken: playlistResponse.data.nextPageToken,
+            prevPageToken: playlistResponse.data.prevPageToken,
+            pageInfo: playlistResponse.data.pageInfo || { totalResults: 0, resultsPerPage: 0 },
+            items: detailedVideos
+          };
+        },
+        2 + Math.ceil(maxResults / 50), // Channel + playlist + estimated video details cost
+        'getAllVideos (API key)'
+      );
+    }
   }
 
   /**
@@ -319,11 +378,21 @@ export class YouTubeClient {
 
     return this.executeApiCall(
       async () => {
-        const response = await this.youtube.videos.list({
-          key: this.apiKey,
+        // Use OAuth if available, otherwise fall back to API key
+        const auth = this.isAuthenticated() ? this.oauth2Client : undefined;
+        const params: any = {
           part: ['snippet', 'status', 'statistics', 'contentDetails'],
           id: videoIds
-        });
+        };
+
+        // Add authentication method
+        if (auth) {
+          params.auth = auth;
+        } else {
+          params.key = this.apiKey;
+        }
+
+        const response = await this.youtube.videos.list(params);
 
         return (response.data.items || []) as YouTubeVideo[];
       },
