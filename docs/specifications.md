@@ -29,6 +29,13 @@
    - Process videos based on filename or title patterns
    - Apply different rules for different video types
 
+5. **Dry-Run Mode**
+   - Preview all changes before applying them
+   - Validate configurations and data integrity
+   - Estimate API quota usage
+   - Show detailed before/after comparisons
+   - Generate comprehensive preview reports
+
 ## User Workflow & Requirements
 
 ### Current Upload Process
@@ -553,3 +560,99 @@ VERBOSE=true
   ]
 }
 ```
+
+### Dry-Run System
+
+#### Overview
+The dry-run feature allows users to preview all changes that would be made to their YouTube channel without actually applying them. This is critical for safety and validation before making bulk changes.
+
+#### Dry-Run Capabilities
+- **Preview Mode**: Show exactly what would change for each video
+- **Validation**: Check all configurations and data before processing
+- **Cost Estimation**: Calculate API quota usage for the operation
+- **Before/After Comparison**: Display current vs. proposed state
+- **Comprehensive Reporting**: Generate detailed preview reports
+
+#### Dry-Run Output Format
+```json
+{
+  "mode": "dry-run",
+  "summary": {
+    "videosToProcess": 45,
+    "estimatedApiQuota": 2250,
+    "playlistAssignments": 67,
+    "processingTime": "00:02:30"
+  },
+  "preview": [
+    {
+      "videoId": "video_id_1",
+      "currentState": {
+        "title": "Tom Clancy's The Division 2 2025 03 29   10 01 17 02 going rogue gone wrong",
+        "description": "Tom Clancy's The Division 2 2025 03 29   10 01 17 02",
+        "tags": ["gaming", "gameplay"],
+        "playlists": []
+      },
+      "proposedState": {
+        "title": "DZ going rogue gone wrong / The Division 2 / 2025-03-29",
+        "description": "Tom Clancy's The Division 2 / 2025-03-29 10:01 [metadata v1.1: proc_20250627_100132]",
+        "tags": ["The Division 2", "Gaming", "Gameplay", "Dark Zone"],
+        "playlists": ["Dark Zone", "The Division 2"]
+      },
+      "changes": {
+        "titleChanged": true,
+        "descriptionChanged": true,
+        "tagsChanged": true,
+        "playlistsChanged": true
+      }
+    }
+  ],
+  "validation": {
+    "configValid": true,
+    "dataIntegrity": true,
+    "apiQuotaAvailable": true,
+    "warnings": [],
+    "errors": []
+  }
+}
+```
+
+#### Dry-Run Command Interface
+```bash
+# Preview video processing changes
+ts-node scripts/process-videos.ts --dry-run --input filtered-videos.json
+
+# Preview playlist assignments
+ts-node scripts/manage-playlists.ts --dry-run --input processed-videos.json
+
+# Preview specific video changes
+ts-node scripts/process-videos.ts --dry-run --video-id video_id_1
+
+# Preview with verbose output
+ts-node scripts/process-videos.ts --dry-run --verbose --input filtered-videos.json
+
+# Preview and save report
+ts-node scripts/process-videos.ts --dry-run --input filtered-videos.json --output preview-report.json
+```
+
+#### Validation Checks
+- **Configuration Validation**: Verify all config files are valid and complete
+- **Data Integrity**: Check video database consistency
+- **API Quota**: Verify sufficient quota for the operation
+- **Authentication**: Confirm OAuth tokens are valid
+- **Rate Limits**: Check current API usage status
+- **Playlist Rules**: Validate playlist matching rules
+- **Transformation Rules**: Test title/description transformation patterns
+
+#### Cost Estimation
+- **API Call Calculation**: Count all required API calls
+- **Quota Usage**: Estimate total quota consumption
+- **Rate Limit Impact**: Assess impact on daily limits
+- **Processing Time**: Estimate total processing duration
+- **Resource Requirements**: Memory and storage needs
+
+#### Safety Features
+- **No API Calls**: Dry-run mode makes zero API calls
+- **Read-Only Operations**: Only reads local data and configurations
+- **Validation First**: Comprehensive validation before any processing
+- **Clear Warnings**: Highlight potential issues or conflicts
+- **Detailed Logging**: Full audit trail of what would be done
