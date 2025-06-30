@@ -112,9 +112,42 @@
 ### API Requirements
 - **YouTube Data API v3**: Primary API for all operations
 - **Authentication**: 
-  - API Key for read operations
+  - API Key for read operations (public videos only)
   - OAuth 2.0 for write operations (updating videos, playlists)
+  - **OAuth 2.0 required for fetching all videos** (public, unlisted, private)
 - **Rate Limits**: 10,000 units per day (free tier)
+
+### Authentication Requirements for Complete Video Access
+
+#### Video Visibility and API Access
+- **Public videos**: Always retrievable via API (API Key or OAuth 2.0)
+- **Unlisted videos**: Only retrievable with OAuth 2.0 authentication as channel owner
+- **Private videos**: Only retrievable with OAuth 2.0 authentication as channel owner
+
+#### Required Authentication Method
+- **API Key only**: Limited to public videos
+- **OAuth 2.0 + API Key**: Full access to all videos (public, unlisted, private)
+- **Channel Owner Authentication**: Must authenticate as the channel owner to access unlisted/private videos
+
+#### OAuth 2.0 Setup
+- **Setup Script**: `scripts/setup-oauth.ts` provides OAuth 2.0 authentication
+- **Required Scopes**: 
+  - `https://www.googleapis.com/auth/youtube` (read/write access)
+  - `https://www.googleapis.com/auth/youtube.force-ssl` (secure access)
+- **Token Storage**: OAuth tokens stored in `token.json` (gitignored)
+- **Authentication Flow**: Interactive browser-based authentication
+
+#### Video Fetching Implementation Requirements
+- **Use OAuth 2.0 for video listing**: Replace API key calls with OAuth 2.0 calls
+- **Use `mine: true` parameter**: When authenticated as channel owner to get all videos
+- **Fallback to API Key**: For public-only operations when OAuth not available
+- **Authentication Check**: Verify OAuth authentication before attempting to fetch all videos
+
+#### Benefits of Complete Video Access
+- **Process all videos**: Including unlisted and private videos
+- **Complete database**: Build comprehensive video database
+- **Full automation**: Process videos regardless of privacy status
+- **Better organization**: Include all videos in playlist management
 
 ### YouTube API Rate Limits
 - **Daily Quota**: 10,000 units (free tier)
@@ -426,233 +459,4 @@ VERBOSE=true
 - **Statistics Filters**: `min/max_views`, `min/max_likes`, `min/max_comments` (with `_not` variants)
 - **Content Filters**: `category_id`, `license`, `definition`, `caption`, `default_language` (with `_not` variants)
 - **Text Filters**: `title/description/tags_contains/not_contains`
-- **Metadata Filters**: `metadata_version`, `has_metadata_version`, `has_recording_date`, `has_tags` (with `_not` variants)
-- **Processing Filters**: `needs_processing`, `already_processed`, `processing_failed`, `has_processing_errors` (with `_not` variants)
-
-### Playlist Rules JSON Structure
-```json
-{
-  "playlists": [
-    {
-      "id": "playlist_id_1",
-      "title": "Dark Zone",
-      "description": "Dark Zone gameplay videos",
-      "visibility": "public",
-      "rules": ["DZ", "dark zone", "rogue"]
-    },
-    {
-      "id": "playlist_id_2", 
-      "title": "Tutorials",
-      "description": "Game tutorials and guides",
-      "visibility": "public",
-      "rules": ["tutorial", "guide", "how to"]
-    }
-  ]
-}
-```
-
-### Title/Description Templates
-```json
-{
-  "templates": {
-    "division2": {
-      "titleFormat": "{content} / The Division 2 / {date}",
-      "descriptionFormat": "Tom Clancy's The Division 2 / {date} {time}",
-      "dateFormat": "YYYY-MM-DD",
-      "timeFormat": "HH:mm",
-      "baseTags": ["The Division 2", "Gaming", "Gameplay", "Tom Clancy", "4K", "Royalty Free", "Free Reuse"],
-      "metadataVersion": "v1.1"
-    }
-  }
-}
-```
-
-### Tag Management Strategy
-```json
-{
-  "tagRules": {
-    "baseTags": ["The Division 2", "Gaming", "Gameplay", "Tom Clancy", "4K", "Royalty Free", "Free Reuse"],
-    "dynamicTagCount": 2,
-    "excludeFromTitle": true,
-    "maxTotalTags": 15,
-    "keywordMapping": {
-      "DZ": "Dark Zone",
-      "rogue": "Rogue Agent",
-      "tutorial": "Tutorial"
-    }
-  }
-}
-```
-
-### Video Database Structure (data/videos.json)
-```json
-{
-  "videos": [
-    {
-      "id": "video_id_1",
-      "title": "Example Video Title",
-      "description": "This is an example video description.",
-      "publishedAt": "2025-06-26T12:26:13Z",
-      "datetime": "2025-06-26",
-      "tags": ["tag1", "tag2"],
-      "categoryId": "20",
-      "privacyStatus": "public",
-      "madeForKids": false,
-      "license": "youtube",
-      "uploadStatus": "processed",
-      "embeddable": true,
-      "publicStatsViewable": true,
-      "definition": "hd",
-      "caption": "false",
-      "statistics": {
-        "viewCount": "123",
-        "likeCount": "10",
-        "favoriteCount": "0",
-        "commentCount": "2"
-      },
-      "lastFetched": "2025-06-29T20:10:43.642Z",
-      "lastUpdated": "2025-06-26T12:26:13Z"
-    }
-  ]
-}
-```
-
-**Note**: The YouTube Data API v3 does not provide actual video resolution (width/height in pixels). The `definition` field indicates quality level ("hd", "sd") but not specific dimensions. The `contentDetails.dimension` field only indicates whether the video is 2D or 3D content.
-
-### History Structure (data/history.json)
-```json
-{
-  "changes": [
-    {
-      "date": "2025-06-27T10:01:32Z",
-      "videoId": "video_id_1",
-      "field": "title",
-      "oldValue": "Tom Clancy's The Division 2 2025 03 29   10 01 17 02 going rogue gone wrong",
-      "newValue": "DZ going rogue gone wrong / The Division 2 / 2025-03-29"
-    },
-    {
-      "date": "2025-06-27T10:01:32Z",
-      "videoId": "video_id_1",
-      "field": "description",
-      "oldValue": "Tom Clancy's The Division 2 2025 03 29   10 01 17 02",
-      "newValue": "Tom Clancy's The Division 2 / 2025-03-29 10:01"
-    }
-  ]
-}
-```
-
-### Playlist File Structure (data/playlists/dark_zone.json)
-```json
-{
-  "playlistId": "playlist_id_1",
-  "title": "Dark Zone",
-  "videos": [
-    {
-      "position": 0,
-      "videoId": "video_id_1",
-      "title": "DZ going rogue gone wrong / The Division 2 / 2025-03-29"
-    },
-    {
-      "position": 1,
-      "videoId": "video_id_2",
-      "title": "Dark Zone PvP action / The Division 2 / 2025-03-30"
-    }
-  ]
-}
-```
-
-### Dry-Run System
-
-#### Overview
-The dry-run feature allows users to preview all changes that would be made to their YouTube channel without actually applying them. This is critical for safety and validation before making bulk changes.
-
-#### Dry-Run Capabilities
-- **Preview Mode**: Show exactly what would change for each video
-- **Validation**: Check all configurations and data before processing
-- **Cost Estimation**: Calculate API quota usage for the operation
-- **Before/After Comparison**: Display current vs. proposed state
-- **Comprehensive Reporting**: Generate detailed preview reports
-
-#### Dry-Run Output Format
-```json
-{
-  "mode": "dry-run",
-  "summary": {
-    "videosToProcess": 45,
-    "estimatedApiQuota": 2250,
-    "playlistAssignments": 67,
-    "processingTime": "00:02:30"
-  },
-  "preview": [
-    {
-      "videoId": "video_id_1",
-      "currentState": {
-        "title": "Tom Clancy's The Division 2 2025 03 29   10 01 17 02 going rogue gone wrong",
-        "description": "Tom Clancy's The Division 2 2025 03 29   10 01 17 02",
-        "tags": ["gaming", "gameplay"],
-        "playlists": []
-      },
-      "proposedState": {
-        "title": "DZ going rogue gone wrong / The Division 2 / 2025-03-29",
-        "description": "Tom Clancy's The Division 2 / 2025-03-29 10:01 [metadata v1.1: proc_20250627_100132]",
-        "tags": ["The Division 2", "Gaming", "Gameplay", "Dark Zone"],
-        "playlists": ["Dark Zone", "The Division 2"]
-      },
-      "changes": {
-        "titleChanged": true,
-        "descriptionChanged": true,
-        "tagsChanged": true,
-        "playlistsChanged": true
-      }
-    }
-  ],
-  "validation": {
-    "configValid": true,
-    "dataIntegrity": true,
-    "apiQuotaAvailable": true,
-    "warnings": [],
-    "errors": []
-  }
-}
-```
-
-#### Dry-Run Command Interface
-```bash
-# Preview video processing changes
-ts-node scripts/process-videos.ts --dry-run --input filtered-videos.json
-
-# Preview playlist assignments
-ts-node scripts/manage-playlists.ts --dry-run --input processed-videos.json
-
-# Preview specific video changes
-ts-node scripts/process-videos.ts --dry-run --video-id video_id_1
-
-# Preview with verbose output
-ts-node scripts/process-videos.ts --dry-run --verbose --input filtered-videos.json
-
-# Preview and save report
-ts-node scripts/process-videos.ts --dry-run --input filtered-videos.json --output preview-report.json
-```
-
-#### Validation Checks
-- **Configuration Validation**: Verify all config files are valid and complete
-- **Data Integrity**: Check video database consistency
-- **API Quota**: Verify sufficient quota for the operation
-- **Authentication**: Confirm OAuth tokens are valid
-- **Rate Limits**: Check current API usage status
-- **Playlist Rules**: Validate playlist matching rules
-- **Transformation Rules**: Test title/description transformation patterns
-
-#### Cost Estimation
-- **API Call Calculation**: Count all required API calls
-- **Quota Usage**: Estimate total quota consumption
-- **Rate Limit Impact**: Assess impact on daily limits
-- **Processing Time**: Estimate total processing duration
-- **Resource Requirements**: Memory and storage needs
-
-#### Safety Features
-- **No API Calls**: Dry-run mode makes zero API calls
-- **Read-Only Operations**: Only reads local data and configurations
-- **Validation First**: Comprehensive validation before any processing
-- **Clear Warnings**: Highlight potential issues or conflicts
-- **Detailed Logging**: Full audit trail of what would be done
+- **Metadata Filters**: `

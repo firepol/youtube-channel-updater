@@ -35,20 +35,39 @@ This plan outlines the step-by-step implementation of the YouTube Channel Update
 - **Dependencies**: 1.1
 - **Estimated Time**: 1 hour
 
+### 1.4 OAuth 2.0 Authentication Setup
+- **Task**: Implement OAuth 2.0 authentication for complete video access
+- **Deliverables**:
+  - `scripts/setup-oauth.ts` - Interactive OAuth setup script
+  - OAuth token management (load/save tokens)
+  - Authentication verification
+  - Required scopes configuration
+- **Features**:
+  - Interactive browser-based authentication
+  - Token storage in `token.json` (gitignored)
+  - Authentication testing and validation
+  - Support for required scopes (`youtube`, `youtube.force-ssl`)
+- **Dependencies**: 1.2, 1.3
+- **Estimated Time**: 1 hour
+
 ## Phase 2: Data Foundation
 
 ### 2.1 Video Database Builder
-- **Task**: Create script to build initial `videos.json` database
+- **Task**: Create script to build initial `videos.json` database with complete video access
 - **Script**: `scripts/build-video-database.ts`
 - **Features**:
+  - **OAuth 2.0 Authentication**: Use OAuth 2.0 to fetch all videos (public, unlisted, private)
+  - **Fallback to API Key**: Use API key for public-only access when OAuth not available
+  - **Authentication Check**: Verify OAuth authentication before attempting to fetch all videos
+  - **Use `mine: true` parameter**: When authenticated as channel owner to get all videos
   - Paginated fetching of all channel videos
   - Console logging of current page (for crash recovery)
   - Duplicate prevention (check by video ID)
   - Progress tracking and resume capability
   - Extract datetime from title/description
   - Handle rate limits gracefully
-- **Output**: `data/videos.json` with all videos
-- **Dependencies**: 1.2, 1.3
+- **Output**: `data/videos.json` with all videos (including unlisted and private)
+- **Dependencies**: 1.2, 1.3, 1.4
 - **Estimated Time**: 3 hours
 
 ### 2.2 Playlist Discovery
@@ -164,9 +183,10 @@ This plan outlines the step-by-step implementation of the YouTube Channel Update
 ### Week 1: Foundation
 1. **Day 1**: Project setup (1.1, 1.2)
 2. **Day 2**: Configuration system (1.3)
-3. **Day 3**: Video database builder (2.1)
-4. **Day 4**: Playlist discovery (2.2)
-5. **Day 5**: Playlist content builder (2.3)
+3. **Day 3**: OAuth 2.0 authentication setup (1.4)
+4. **Day 4**: Video database builder (2.1)
+5. **Day 5**: Playlist discovery (2.2)
+6. **Day 6**: Playlist content builder (2.3)
 
 ### Week 2: Processing
 1. **Day 1**: Video filtering system (3.1)
