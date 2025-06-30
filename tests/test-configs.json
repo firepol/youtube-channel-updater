@@ -1,0 +1,63 @@
+{
+  "division2_patterns": {
+    "basic": {
+      "pattern": "Tom Clancy's The Division 2 (?<year>\\d{4}) (?<month>\\d{2}) (?<day>\\d{2}) (?<hour>\\d{2}) (?<minute>\\d{2}) (?<second>\\d{2}) (?<centisecond>\\d{2}) (?<rest>.+)",
+      "replacement": "DZ $<rest> / The Division 2 / $<year>-$<month>-$<day>"
+    },
+    "flexible_spacing": {
+      "pattern": "Tom Clancy's The Division 2\\s+(?<year>\\d{4})\\s+(?<month>\\d{2})\\s+(?<day>\\d{2})\\s+(?<hour>\\d{2})\\s+(?<minute>\\d{2})\\s+(?<second>\\d{2})\\s+(?<centisecond>\\d{2})\\s+(?<rest>.+)",
+      "replacement": "DZ $<rest> / The Division 2 / $<year>-$<month>-$<day>"
+    },
+    "with_game_group": {
+      "pattern": "(?<game>Tom Clancy's The Division 2) (?<year>\\d{4}) (?<month>\\d{2}) (?<day>\\d{2}) (?<hour>\\d{2}) (?<minute>\\d{2}) (?<second>\\d{2}) (?<centisecond>\\d{2}) (?<rest>.+)",
+      "replacement": "DZ $<rest> / $<game> / $<year>-$<month>-$<day>"
+    },
+    "optional_time": {
+      "pattern": "Tom Clancy's The Division 2 (?<year>\\d{4}) (?<month>\\d{2}) (?<day>\\d{2})(?: (?<hour>\\d{2}) (?<minute>\\d{2}) (?<second>\\d{2}) (?<centisecond>\\d{2}))? (?<rest>.+)",
+      "replacement": "DZ $<rest> / The Division 2 / $<year>-$<month>-$<day>"
+    }
+  },
+  "alternative_formats": {
+    "dash_separated": {
+      "pattern": "Tom Clancy's The Division 2 (?<year>\\d{4})-(?<month>\\d{2})-(?<day>\\d{2}) (?<hour>\\d{2}):(?<minute>\\d{2}):(?<second>\\d{2}) (?<rest>.+)",
+      "replacement": "DZ $<rest> / The Division 2 / $<year>-$<month>-$<day>"
+    },
+    "underscore_separated": {
+      "pattern": "Tom Clancy's The Division 2 (?<year>\\d{4})_(?<month>\\d{2})_(?<day>\\d{2})_(?<hour>\\d{2})_(?<minute>\\d{2})_(?<second>\\d{2}) (?<rest>.+)",
+      "replacement": "DZ $<rest> / The Division 2 / $<year>-$<month>-$<day>"
+    },
+    "compact_format": {
+      "pattern": "Tom Clancy's The Division 2 (?<datetime>\\d{8})_(?<time>\\d{6}) (?<rest>.+)",
+      "replacement": "DZ $<rest> / The Division 2 / $<datetime>"
+    }
+  },
+  "test_titles": [
+    "Tom Clancy's The Division 2 2025 03 29 10 01 17 02 going rogue gone wrong",
+    "Tom Clancy's The Division 2 2025  03  29  10  01  17  02 going rogue gone wrong",
+    "Tom Clancy's The Division 2 2025 03 29 10 01 17 02 x",
+    "Tom Clancy's The Division 2 2025 03 29 10 01 17 02 going rogue (gone wrong)",
+    "Tom Clancy's The Division 2 2025-03-29 10:01:17 going rogue gone wrong",
+    "Tom Clancy's The Division 2 2025_03_29_10_01_17 going rogue gone wrong",
+    "Tom Clancy's The Division 2 20250329_100117 going rogue gone wrong",
+    "Just a regular gaming video",
+    "Dark Zone gameplay 2025 03 29 10 01 17 02 going rogue"
+  ],
+  "expected_results": {
+    "basic": {
+      "input": "Tom Clancy's The Division 2 2025 03 29 10 01 17 02 going rogue gone wrong",
+      "output": "DZ going rogue gone wrong / The Division 2 / 2025-03-29"
+    },
+    "flexible_spacing": {
+      "input": "Tom Clancy's The Division 2 2025  03  29  10  01  17  02 going rogue gone wrong",
+      "output": "DZ going rogue gone wrong / The Division 2 / 2025-03-29"
+    },
+    "with_game_group": {
+      "input": "Tom Clancy's The Division 2 2025 03 29 10 01 17 02 going rogue gone wrong",
+      "output": "DZ going rogue gone wrong / Tom Clancy's The Division 2 / 2025-03-29"
+    },
+    "dash_separated": {
+      "input": "Tom Clancy's The Division 2 2025-03-29 10:01:17 going rogue gone wrong",
+      "output": "DZ going rogue gone wrong / The Division 2 / 2025-03-29"
+    }
+  }
+} 

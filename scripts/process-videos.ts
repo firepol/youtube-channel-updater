@@ -749,6 +749,8 @@ class VideoProcessor {
   }
 }
 
+export { VideoProcessor };
+
 async function main(): Promise<void> {
   const program = new Command();
   

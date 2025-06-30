@@ -1,0 +1,26 @@
+{
+  "titleTransform": {
+    "pattern": "Tom Clancy's The Division 2 (?<year>\\d{4}) (?<month>\\d{2}) (?<day>\\d{2}) (?<hour>\\d{2}) (?<minute>\\d{2}) (?<second>\\d{2}) (?<centisecond>\\d{2}) (?<rest>.+)",
+    "replacement": "DZ $<rest> / The Division 2 / $<year>-$<month>-$<day>"
+  },
+  "descriptionTransform": {
+    "pattern": "Tom Clancy's The Division 2 (?<year>\\d{4}) (?<month>\\d{2}) (?<day>\\d{2}) (?<hour>\\d{2}) (?<minute>\\d{2}) (?<second>\\d{2}) (?<centisecond>\\d{2})",
+    "replacement": "Tom Clancy's The Division 2 / $<year>-$<month>-$<day> $<hour>:$<minute>"
+  },
+  "baseTags": [
+    "The Division 2",
+    "Gaming",
+    "Gameplay",
+    "Tom Clancy"
+  ],
+  "maxDynamicTags": 2,
+  "metadataVersion": "v1.1",
+  "_comment": "Named groups make patterns more readable: $<year>, $<month>, $<day>, $<hour>, $<minute>, $<second>, $<centisecond>, $<rest>",
+  "_comment2": "metadataVersion will be used with processing ID format: [metadata v1.1: proc_20250627_100132]",
+  "videoSettings": {
+    "madeForKids": false,
+    "license": "creativeCommon",
+    "categoryId": "20",
+    "allowRemixing": true
+  }
+} 
