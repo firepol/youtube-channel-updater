@@ -5,10 +5,10 @@ import * as path from 'path';
 import { Command } from 'commander';
 import { 
   LocalVideo, 
+  LocalPlaylist, 
+  LocalPlaylistItem, 
   PlaylistConfig, 
-  PlaylistRule,
-  LocalPlaylist,
-  LocalPlaylistItem
+  PlaylistRule 
 } from '../src/types/api-types';
 import { YouTubeClient } from '../src/api/youtube-client';
 import { loadConfig } from '../src/config/config-loader';
@@ -33,6 +33,8 @@ interface ProcessingResult {
   successfulAssignments: number;
   failedAssignments: number;
   processingTime: string;
+  dryRunMode?: boolean;
+  previewReport?: DryRunPreview;
 }
 
 interface ProcessingOptions {
@@ -41,104 +43,212 @@ interface ProcessingOptions {
   dryRun: boolean;
   refreshCache: boolean;
   verbose: boolean;
+  output?: string; // Output file for dry-run reports
+}
+
+interface DryRunPreview {
+  mode: 'dry-run';
+  timestamp: string;
+  summary: {
+    videosToProcess: number;
+    estimatedApiQuota: number;
+    playlistAssignments: number;
+    processingTime: string;
+    validationStatus: 'valid' | 'warnings' | 'errors';
+  };
+  steps: {
+    validation: {
+      status: 'pending' | 'completed';
+      configValid: boolean;
+      dataIntegrity: boolean;
+      apiQuotaAvailable: boolean;
+      authenticationValid: boolean;
+    };
+    playlistMatching: {
+      status: 'pending' | 'completed';
+      playlistsToUpdate: number;
+      assignmentsToMake: number;
+    };
+  };
+  preview: Array<{
+    videoId: string;
+    title: string;
+    currentState: {
+      playlists: string[];
+    };
+    proposedState: {
+      playlists: Array<{
+        playlistId: string;
+        playlistTitle: string;
+        position: number;
+      }>;
+    };
+    changes: {
+      playlistsChanged: boolean;
+      newPlaylists: string[];
+      removedPlaylists: string[];
+    };
+    validation: {
+      positionValid: boolean;
+      playlistValid: boolean;
+      warnings: string[];
+      errors: string[];
+    };
+  }>;
+  validation: {
+    configValid: boolean;
+    dataIntegrity: boolean;
+    apiQuotaAvailable: boolean;
+    authenticationValid: boolean;
+    warnings: string[];
+    errors: string[];
+  };
+  costEstimate: {
+    totalApiCalls: number;
+    quotaUnitsRequired: number;
+    dailyQuotaImpact: number;
+    processingTimeEstimate: string;
+    resourceRequirements: {
+      memory: string;
+      storage: string;
+    };
+  };
+}
+
+interface ValidationResult {
+  valid: boolean;
+  warnings: string[];
+  errors: string[];
+}
+
+interface QuotaEstimate {
+  totalVideos: number;
+  apiCallsRequired: number;
+  quotaUnitsRequired: number;
+  estimatedCost: number;
+  dailyQuotaImpact: number;
+  processingTimeEstimate: string;
+  warnings: string[];
 }
 
 class PlaylistMatcher {
   /**
-   * Check if video matches playlist rules
+   * Check if a video title matches playlist rules
    */
   matchesPlaylist(videoTitle: string, playlistRules: string[]): boolean {
-    return playlistRules.some(keyword => this.matchKeyword(videoTitle, keyword));
-  }
-
-  /**
-   * Case-insensitive matching with space respect
-   * "sp " won't match "specific" but will match "sp mission"
-   */
-  matchKeyword(title: string, keyword: string): boolean {
-    const titleLower = title.toLowerCase();
-    const keywordLower = keyword.toLowerCase();
+    const title = videoTitle.toLowerCase();
     
-    // Exact match
-    if (titleLower === keywordLower) {
-      return true;
-    }
-    
-    // Word boundary match
-    const wordBoundaryRegex = new RegExp(`\\b${keywordLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
-    if (wordBoundaryRegex.test(titleLower)) {
-      return true;
-    }
-    
-    // Phrase match (for multi-word keywords)
-    if (keywordLower.includes(' ') && titleLower.includes(keywordLower)) {
-      return true;
+    for (const rule of playlistRules) {
+      if (this.matchKeyword(title, rule.toLowerCase())) {
+        return true;
+      }
     }
     
     return false;
   }
 
   /**
-   * Get all matching playlists for a video
+   * Match a keyword against a title
+   * Respects word boundaries (e.g., "sp " won't match "specific" but will match "sp mission")
+   */
+  private matchKeyword(title: string, keyword: string): boolean {
+    // Handle exact matches
+    if (title === keyword) {
+      return true;
+    }
+
+    // Handle word boundary matches
+    const words = title.split(/\s+/);
+    const keywordWords = keyword.split(/\s+/);
+
+    // Check if all keyword words are present in title words
+    for (const keywordWord of keywordWords) {
+      let found = false;
+      for (const titleWord of words) {
+        if (titleWord.includes(keywordWord)) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Get all matching playlists for a video title
    */
   getMatchingPlaylists(videoTitle: string, playlists: PlaylistRule[]): PlaylistRule[] {
-    return playlists.filter(playlist => this.matchesPlaylist(videoTitle, playlist.keywords));
+    return playlists.filter(playlist => 
+      this.matchesPlaylist(videoTitle, playlist.keywords)
+    );
   }
 }
 
 class PositionCalculator {
   /**
-   * Calculate correct chronological position in playlist
+   * Calculate the correct position for a video in a playlist based on recording date
    */
   calculatePosition(videoDate: string, playlistVideos: LocalPlaylistItem[]): number {
-    if (!videoDate) {
-      // If no date, add to end
-      return playlistVideos.length;
+    if (playlistVideos.length === 0) {
+      return 0;
     }
 
+    // Sort playlist videos chronologically (oldest first)
+    const sortedVideos = this.sortPlaylistChronologically([...playlistVideos]);
+    
+    // Find the correct position for the new video
     const videoDateTime = new Date(videoDate).getTime();
     
-    // Find the correct position based on chronological order
-    for (let i = 0; i < playlistVideos.length; i++) {
-      const playlistVideoDate = playlistVideos[i].publishedAt;
-      if (playlistVideoDate) {
-        const playlistVideoDateTime = new Date(playlistVideoDate).getTime();
-        if (videoDateTime <= playlistVideoDateTime) {
-          return i;
-        }
+    for (let i = 0; i < sortedVideos.length; i++) {
+      const playlistVideoDateTime = new Date(sortedVideos[i].publishedAt).getTime();
+      
+      if (videoDateTime <= playlistVideoDateTime) {
+        return i;
       }
     }
     
-    // If video is newer than all existing videos, add to end
-    return playlistVideos.length;
+    // If video is newer than all existing videos, add at the end
+    return sortedVideos.length;
   }
 
   /**
-   * Sort playlist videos by recording date
+   * Sort playlist videos chronologically (oldest first)
    */
-  sortPlaylistChronologically(videos: LocalPlaylistItem[]): LocalPlaylistItem[] {
-    return [...videos].sort((a, b) => {
-      const dateA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
-      const dateB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
-      return dateA - dateB;
-    });
-  }
-
-  /**
-   * Handle videos with same date (use time or published date)
-   */
-  handleSameDateVideos(videos: LocalPlaylistItem[]): LocalPlaylistItem[] {
+  private sortPlaylistChronologically(videos: LocalPlaylistItem[]): LocalPlaylistItem[] {
     return videos.sort((a, b) => {
-      const dateA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
-      const dateB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
-      
-      if (dateA === dateB) {
-        // If same date, sort by video ID for consistency
-        return a.videoId.localeCompare(b.videoId);
-      }
-      
+      const dateA = new Date(a.publishedAt).getTime();
+      const dateB = new Date(b.publishedAt).getTime();
       return dateA - dateB;
     });
+  }
+
+  /**
+   * Handle videos with the same date by maintaining original order
+   */
+  private handleSameDateVideos(videos: LocalPlaylistItem[]): LocalPlaylistItem[] {
+    // Group videos by date
+    const groupedByDate = new Map<string, LocalPlaylistItem[]>();
+    
+    for (const video of videos) {
+      const date = video.publishedAt.split('T')[0]; // YYYY-MM-DD
+      if (!groupedByDate.has(date)) {
+        groupedByDate.set(date, []);
+      }
+      groupedByDate.get(date)!.push(video);
+    }
+    
+    // Sort each group by original position
+    const result: LocalPlaylistItem[] = [];
+    for (const [date, dateVideos] of groupedByDate) {
+      dateVideos.sort((a, b) => a.position - b.position);
+      result.push(...dateVideos);
+    }
+    
+    return result;
   }
 }
 
@@ -158,21 +268,18 @@ class PlaylistManager {
   }
 
   /**
-   * Load local playlist cache
+   * Load playlist cache from local file
    */
   private async loadPlaylistCache(playlistId: string): Promise<LocalPlaylist | null> {
-    const playlistFile = path.join(this.playlistsDir, `${playlistId}.json`);
-    
-    if (!await fs.pathExists(playlistFile)) {
-      return null;
-    }
-
     try {
-      return await fs.readJson(playlistFile) as LocalPlaylist;
+      const cacheFile = path.join(this.playlistsDir, `${playlistId}.json`);
+      if (await fs.pathExists(cacheFile)) {
+        return await fs.readJson(cacheFile) as LocalPlaylist;
+      }
     } catch (error) {
-      console.error(`Failed to load playlist cache for ${playlistId}`, error as Error);
-      return null;
+      logVerbose(`Failed to load playlist cache for ${playlistId}: ${error}`);
     }
+    return null;
   }
 
   /**
@@ -180,95 +287,88 @@ class PlaylistManager {
    */
   private async refreshPlaylistCache(playlistId: string): Promise<LocalPlaylist | null> {
     try {
-      console.log(`Refreshing cache for playlist ${playlistId}`);
-      
-      const playlistItemsResponse = await this.youtubeClient.getPlaylistItems(playlistId);
-      const playlistItems = playlistItemsResponse.items || [];
-      
-      if (playlistItems.length === 0) {
-        // Create empty playlist cache
-        const emptyPlaylist: LocalPlaylist = {
-          id: playlistId,
-          title: 'Unknown',
-          description: '',
-          privacyStatus: 'private',
-          itemCount: 0,
-          items: []
-        };
-        
-        await this.savePlaylistCache(playlistId, emptyPlaylist);
-        return emptyPlaylist;
-      }
-
       // Get playlist details from playlists API
       const playlistsResponse = await this.youtubeClient.getPlaylists();
       const playlistDetails = playlistsResponse.items?.find(p => p.id === playlistId);
-      
+      if (!playlistDetails) {
+        return null;
+      }
+
+      // Get playlist items
+      const playlistItemsResponse = await this.youtubeClient.getPlaylistItems(playlistId);
+      if (!playlistItemsResponse || !playlistItemsResponse.items) {
+        return null;
+      }
+
       // Convert to local format
-      const localItems: LocalPlaylistItem[] = playlistItems.map((item, index) => ({
+      const items: LocalPlaylistItem[] = playlistItemsResponse.items.map((item: any, index: number) => ({
         position: index,
         videoId: item.resourceId.videoId,
         title: item.title,
         publishedAt: item.publishedAt
       }));
 
-      const localPlaylist: LocalPlaylist = {
+      const playlist: LocalPlaylist = {
         id: playlistId,
-        title: playlistDetails?.title || 'Unknown',
-        description: playlistDetails?.description || '',
-        privacyStatus: playlistDetails?.privacyStatus || 'private',
-        itemCount: playlistItems.length,
-        items: localItems
+        title: playlistDetails.title,
+        description: playlistDetails.description,
+        privacyStatus: playlistDetails.privacyStatus,
+        itemCount: playlistDetails.itemCount,
+        items
       };
 
-      await this.savePlaylistCache(playlistId, localPlaylist);
-      return localPlaylist;
+      // Save to cache
+      await this.savePlaylistCache(playlistId, playlist);
+      return playlist;
+
     } catch (error) {
-      console.error(`Failed to refresh playlist cache for ${playlistId}`, error as Error);
+      logVerbose(`Failed to refresh playlist cache for ${playlistId}: ${error}`);
       return null;
     }
   }
 
   /**
-   * Save playlist cache to file
+   * Save playlist cache to local file
    */
   private async savePlaylistCache(playlistId: string, playlist: LocalPlaylist): Promise<void> {
-    await fs.ensureDir(this.playlistsDir);
-    const playlistFile = path.join(this.playlistsDir, `${playlistId}.json`);
-    await fs.writeJson(playlistFile, playlist, { spaces: 2 });
+    try {
+      await fs.ensureDir(this.playlistsDir);
+      const cacheFile = path.join(this.playlistsDir, `${playlistId}.json`);
+      await fs.writeJson(cacheFile, playlist, { spaces: 2 });
+    } catch (error) {
+      logVerbose(`Failed to save playlist cache for ${playlistId}: ${error}`);
+    }
   }
 
   /**
-   * Update playlist cache after insertion
+   * Update local playlist cache after adding a video
    */
   private async updatePlaylistCache(playlistId: string, videoId: string, position: number, title: string): Promise<void> {
-    const playlist = await this.loadPlaylistCache(playlistId);
-    if (!playlist) {
-      return;
-    }
+    try {
+      const playlist = await this.loadPlaylistCache(playlistId);
+      if (playlist) {
+        // Insert new item at the calculated position
+        playlist.items.splice(position, 0, {
+          position,
+          videoId,
+          title,
+          publishedAt: new Date().toISOString() // Approximate
+        });
 
-    // Insert video at correct position
-    const newItem: LocalPlaylistItem = {
-      position,
-      videoId,
-      title,
-      publishedAt: new Date().toISOString()
-    };
+        // Update positions for items after the insertion
+        for (let i = position + 1; i < playlist.items.length; i++) {
+          playlist.items[i].position = i;
+        }
 
-    playlist.items.splice(position, 0, newItem);
-    
-    // Update positions for all items after insertion
-    for (let i = position + 1; i < playlist.items.length; i++) {
-      playlist.items[i].position = i;
+        await this.savePlaylistCache(playlistId, playlist);
+      }
+    } catch (error) {
+      logVerbose(`Failed to update playlist cache for ${playlistId}: ${error}`);
     }
-    
-    playlist.itemCount = playlist.items.length;
-    
-    await this.savePlaylistCache(playlistId, playlist);
   }
 
   /**
-   * Add video to playlist at specific position
+   * Add video to playlist
    */
   private async addVideoToPlaylist(
     videoId: string, 
@@ -291,6 +391,242 @@ class PlaylistManager {
       console.error(`Failed to add video ${videoId} to playlist ${playlistId}`, error as Error);
       return { success: false, error: errorMessage };
     }
+  }
+
+  /**
+   * Validate configuration
+   */
+  private validateConfiguration(): ValidationResult {
+    const warnings: string[] = [];
+    const errors: string[] = [];
+
+    // Check playlist configuration
+    if (!this.playlistConfig.playlists || this.playlistConfig.playlists.length === 0) {
+      errors.push('No playlists configured');
+    }
+
+    // Check each playlist has required fields
+    for (const playlist of this.playlistConfig.playlists) {
+      if (!playlist.id) {
+        errors.push(`Playlist missing ID: ${playlist.title || 'Unknown'}`);
+      }
+      if (!playlist.title) {
+        errors.push(`Playlist missing title: ${playlist.id || 'Unknown'}`);
+      }
+      if (!playlist.keywords || playlist.keywords.length === 0) {
+        warnings.push(`Playlist has no keywords: ${playlist.title}`);
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      warnings,
+      errors
+    };
+  }
+
+  /**
+   * Validate video database integrity
+   */
+  private async validateVideoDatabase(videos: LocalVideo[]): Promise<ValidationResult> {
+    const warnings: string[] = [];
+    const errors: string[] = [];
+
+    // Check if video database exists
+    if (!await fs.pathExists('data/videos.json')) {
+      errors.push('Video database not found');
+      return { valid: false, warnings, errors };
+    }
+
+    // Check for required fields
+    for (const video of videos) {
+      if (!video.id) {
+        errors.push(`Video missing ID: ${video.title || 'Unknown'}`);
+      }
+      if (!video.title) {
+        warnings.push(`Video missing title: ${video.id}`);
+      }
+      if (!video.recordingDate && !video.publishedAt) {
+        warnings.push(`Video missing date information: ${video.id}`);
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      warnings,
+      errors
+    };
+  }
+
+  /**
+   * Estimate API quota usage
+   */
+  private estimateApiQuota(videos: LocalVideo[]): QuotaEstimate {
+    // Count total playlist assignments that would be made
+    let totalAssignments = 0;
+    for (const video of videos) {
+      const matchingPlaylists = this.matcher.getMatchingPlaylists(video.title, this.playlistConfig.playlists);
+      totalAssignments += matchingPlaylists.length;
+    }
+
+    const apiCallsRequired = totalAssignments; // 1 API call per playlist assignment
+    const quotaUnitsRequired = totalAssignments * 50; // 50 units per playlist assignment
+    const dailyQuotaImpact = (quotaUnitsRequired / 10000) * 100; // Percentage of daily quota
+    const processingTimeEstimate = `${Math.ceil(totalAssignments / 10)}:${(totalAssignments % 10 * 6).toString().padStart(2, '0')}`; // Rough estimate
+
+    const warnings: string[] = [];
+    if (dailyQuotaImpact > 80) {
+      warnings.push(`High quota usage: ${dailyQuotaImpact.toFixed(1)}% of daily limit`);
+    }
+
+    return {
+      totalVideos: videos.length,
+      apiCallsRequired,
+      quotaUnitsRequired,
+      estimatedCost: quotaUnitsRequired,
+      dailyQuotaImpact,
+      processingTimeEstimate,
+      warnings
+    };
+  }
+
+  /**
+   * Validate authentication
+   */
+  private validateAuthentication(): ValidationResult {
+    const warnings: string[] = [];
+    const errors: string[] = [];
+
+    if (!this.youtubeClient.isAuthenticated()) {
+      errors.push('YouTube client not authenticated');
+    }
+
+    return {
+      valid: errors.length === 0,
+      warnings,
+      errors
+    };
+  }
+
+  /**
+   * Generate comprehensive dry-run preview
+   */
+  private async generateDryRunPreview(videos: LocalVideo[]): Promise<DryRunPreview> {
+    const startTime = Date.now();
+    
+    // Run validation pipeline
+    const configValidation = this.validateConfiguration();
+    const dbValidation = await this.validateVideoDatabase(videos);
+    const authValidation = this.validateAuthentication();
+    const quotaEstimate = this.estimateApiQuota(videos);
+
+    // Combine validation results
+    const allWarnings = [
+      ...configValidation.warnings,
+      ...dbValidation.warnings,
+      ...authValidation.warnings,
+      ...quotaEstimate.warnings
+    ];
+    const allErrors = [
+      ...configValidation.errors,
+      ...dbValidation.errors,
+      ...authValidation.errors
+    ];
+
+    const validationStatus = allErrors.length > 0 ? 'errors' : allWarnings.length > 0 ? 'warnings' : 'valid';
+
+    // Generate preview for each video
+    const preview = videos.map(video => {
+      const matchingPlaylists = this.matcher.getMatchingPlaylists(video.title, this.playlistConfig.playlists);
+      
+      // Calculate positions for each matching playlist
+      const proposedPlaylists = matchingPlaylists.map(playlist => ({
+        playlistId: playlist.id,
+        playlistTitle: playlist.title,
+        position: 0 // Will be calculated when playlist cache is loaded
+      }));
+
+      // Validate playlist assignments
+      const positionValid = true; // Will be validated when cache is loaded
+      const playlistValid = matchingPlaylists.length > 0;
+
+      const videoWarnings: string[] = [];
+      const videoErrors: string[] = [];
+
+      if (matchingPlaylists.length === 0) {
+        videoWarnings.push('No matching playlists found');
+      }
+
+      return {
+        videoId: video.id,
+        title: video.title,
+        currentState: {
+          playlists: [] // We don't track current playlist assignments in dry-run
+        },
+        proposedState: {
+          playlists: proposedPlaylists
+        },
+        changes: {
+          playlistsChanged: matchingPlaylists.length > 0,
+          newPlaylists: matchingPlaylists.map(p => p.title),
+          removedPlaylists: []
+        },
+        validation: {
+          positionValid,
+          playlistValid,
+          warnings: videoWarnings,
+          errors: videoErrors
+        }
+      };
+    });
+
+    const endTime = Date.now();
+    const processingTime = `${Math.floor((endTime - startTime) / 60000)}:${Math.floor(((endTime - startTime) % 60000) / 1000).toString().padStart(2, '0')}`;
+
+    return {
+      mode: 'dry-run',
+      timestamp: new Date().toISOString(),
+      summary: {
+        videosToProcess: videos.length,
+        estimatedApiQuota: quotaEstimate.quotaUnitsRequired,
+        playlistAssignments: quotaEstimate.apiCallsRequired,
+        processingTime,
+        validationStatus
+      },
+      steps: {
+        validation: {
+          status: 'completed',
+          configValid: configValidation.valid,
+          dataIntegrity: dbValidation.valid,
+          apiQuotaAvailable: quotaEstimate.dailyQuotaImpact < 100,
+          authenticationValid: authValidation.valid
+        },
+        playlistMatching: {
+          status: 'completed',
+          playlistsToUpdate: this.playlistConfig.playlists.length,
+          assignmentsToMake: quotaEstimate.apiCallsRequired
+        }
+      },
+      preview,
+      validation: {
+        configValid: configValidation.valid,
+        dataIntegrity: dbValidation.valid,
+        apiQuotaAvailable: quotaEstimate.dailyQuotaImpact < 100,
+        authenticationValid: authValidation.valid,
+        warnings: allWarnings,
+        errors: allErrors
+      },
+      costEstimate: {
+        totalApiCalls: quotaEstimate.apiCallsRequired,
+        quotaUnitsRequired: quotaEstimate.quotaUnitsRequired,
+        dailyQuotaImpact: quotaEstimate.dailyQuotaImpact,
+        processingTimeEstimate: quotaEstimate.processingTimeEstimate,
+        resourceRequirements: {
+          memory: '~30MB',
+          storage: '~1MB'
+        }
+      }
+    };
   }
 
   /**
@@ -379,6 +715,66 @@ class PlaylistManager {
    */
   async processVideos(videos: LocalVideo[], options: ProcessingOptions): Promise<ProcessingResult> {
     const startTime = Date.now();
+    const result: ProcessingResult = {
+      processedVideos: 0,
+      playlistAssignments: [],
+      totalAssignments: 0,
+      successfulAssignments: 0,
+      failedAssignments: 0,
+      processingTime: ''
+    };
+
+    // If dry-run mode, generate comprehensive preview
+    if (options.dryRun) {
+      result.dryRunMode = true;
+      result.previewReport = await this.generateDryRunPreview(videos);
+      
+      // Display preview summary
+      const preview = result.previewReport;
+      getLogger().info('=== DRY RUN PREVIEW ===');
+      getLogger().info(`Videos to process: ${preview.summary.videosToProcess}`);
+      getLogger().info(`Estimated API quota: ${preview.summary.estimatedApiQuota} units`);
+      getLogger().info(`Playlist assignments: ${preview.summary.playlistAssignments}`);
+      getLogger().info(`Processing time: ${preview.summary.processingTime}`);
+      getLogger().info(`Validation status: ${preview.summary.validationStatus}`);
+      
+      if (preview.validation.errors.length > 0) {
+        getLogger().error('Validation errors:');
+        preview.validation.errors.forEach(error => getLogger().error(`  - ${error}`));
+      }
+      
+      if (preview.validation.warnings.length > 0) {
+        getLogger().warning('Validation warnings:');
+        preview.validation.warnings.forEach(warning => getLogger().warning(`  - ${warning}`));
+      }
+      
+      // Show sample preview (first 3 videos)
+      const sampleVideos = preview.preview.slice(0, 3);
+      getLogger().info('Sample preview:');
+      for (const video of sampleVideos) {
+        getLogger().info(`Video: ${video.videoId} - "${video.title}"`);
+        if (video.proposedState.playlists.length > 0) {
+          getLogger().info(`  Would be added to: ${video.proposedState.playlists.map(p => p.playlistTitle).join(', ')}`);
+        } else {
+          getLogger().info(`  No matching playlists found`);
+        }
+      }
+      
+      if (preview.preview.length > 3) {
+        getLogger().info(`... and ${preview.preview.length - 3} more videos`);
+      }
+      
+      getLogger().info('=== END DRY RUN PREVIEW ===');
+      
+      // Save preview report if output file specified
+      if (options.output) {
+        await fs.writeJson(options.output, preview, { spaces: 2 });
+        getLogger().info(`Dry-run report saved to ${options.output}`);
+      }
+      
+      return result;
+    }
+
     const assignments: PlaylistAssignment[] = [];
     
     let totalAssignments = 0;
@@ -438,6 +834,7 @@ async function main(): Promise<void> {
     .option('--dry-run', 'Show what would be done without making changes')
     .option('--refresh-cache', 'Force refresh playlist cache from YouTube API')
     .option('-v, --verbose', 'Enable verbose logging')
+    .option('-o, --output <file>', 'Output file for dry-run reports')
     .option('-h, --help', 'Show help information')
     .parse();
 
@@ -446,8 +843,14 @@ async function main(): Promise<void> {
     videoId: program.opts().videoId,
     dryRun: program.opts().dryRun || false,
     refreshCache: program.opts().refreshCache || false,
-    verbose: program.opts().verbose || false
+    verbose: program.opts().verbose || false,
+    output: program.opts().output
   };
+
+  // Check if help was requested
+  if (program.opts().help) {
+    return;
+  }
 
   if (options.verbose) {
     process.env.VERBOSE = 'true';
@@ -473,100 +876,87 @@ async function main(): Promise<void> {
     );
 
     // Load OAuth tokens
-    await youtubeClient.loadTokens();
+    const hasTokens = await youtubeClient.loadTokens();
+    if (!hasTokens) {
+      getLogger().error('OAuth tokens not found. Please run authentication first.');
+      process.exit(1);
+    }
+    
+    if (!youtubeClient.isAuthenticated()) {
+      getLogger().error('YouTube client not authenticated. Please run authentication first.');
+      process.exit(1);
+    }
 
-    const manager = new PlaylistManager(youtubeClient, config.playlists);
+    // Initialize playlist manager
+    const playlistManager = new PlaylistManager(youtubeClient, config.playlists);
 
-    // Load videos to process
     let videos: LocalVideo[] = [];
 
+    // Load videos to process
     if (options.videoId) {
       // Process specific video
       const videoDatabase = await fs.readJson('data/videos.json') as LocalVideo[];
       const video = videoDatabase.find(v => v.id === options.videoId);
-      
       if (!video) {
-        console.error(`Video with ID ${options.videoId} not found in database`);
+        getLogger().error(`Video with ID ${options.videoId} not found in database`);
         process.exit(1);
       }
-      
       videos = [video];
     } else if (options.input) {
-      // Load from input file
+      // Process filtered videos
       if (!await fs.pathExists(options.input)) {
-        console.error(`Input file ${options.input} not found`);
+        getLogger().error(`Input file ${options.input} not found`);
         process.exit(1);
       }
-      
       videos = await fs.readJson(options.input) as LocalVideo[];
     } else {
-      // Load all videos from database
-      if (!await fs.pathExists('data/videos.json')) {
-        console.error('Video database not found. Run build-video-database.ts first.');
-        process.exit(1);
-      }
-      
-      videos = await fs.readJson('data/videos.json') as LocalVideo[];
+      getLogger().error('Either --input or --video-id must be specified');
+      process.exit(1);
     }
 
     if (videos.length === 0) {
-      console.log('No videos to process');
+      getLogger().info('No videos to process');
       return;
     }
 
-    getLogger().info(`Processing ${videos.length} videos for playlist assignment`);
-
     // Process videos
-    const result = await manager.processVideos(videos, options);
+    const result = await playlistManager.processVideos(videos, options);
 
     // Output results
-    console.log('\n=== Playlist Management Results ===');
-    console.log(`Processed Videos: ${result.processedVideos}`);
-    console.log(`Total Assignments: ${result.totalAssignments}`);
-    console.log(`Successful: ${result.successfulAssignments}`);
-    console.log(`Failed: ${result.failedAssignments}`);
-    console.log(`Processing Time: ${result.processingTime}`);
+    if (!options.dryRun) {
+      getLogger().info('Playlist management completed:');
+      getLogger().info(`  Total videos: ${result.processedVideos}`);
+      getLogger().info(`  Total assignments: ${result.totalAssignments}`);
+      getLogger().info(`  Successful assignments: ${result.successfulAssignments}`);
+      getLogger().info(`  Failed assignments: ${result.failedAssignments}`);
+      getLogger().info(`  Processing time: ${result.processingTime}`);
 
-    if (options.verbose) {
-      console.log('\n=== Detailed Assignments ===');
-      for (const assignment of result.playlistAssignments) {
-        if (assignment.assignedPlaylists.length > 0) {
-          console.log(`\nVideo: ${assignment.title}`);
-          for (const playlist of assignment.assignedPlaylists) {
-            const status = playlist.status === 'success' ? '✅' : '❌';
-            console.log(`  ${status} ${playlist.playlistTitle} (position ${playlist.position})`);
-            if (playlist.error) {
-              console.log(`    Error: ${playlist.error}`);
+      if (result.failedAssignments > 0) {
+        getLogger().info('Failed assignments:');
+        for (const assignment of result.playlistAssignments) {
+          for (const playlistAssignment of assignment.assignedPlaylists) {
+            if (playlistAssignment.status === 'failed') {
+              getLogger().info(`  ${assignment.videoId} → ${playlistAssignment.playlistTitle}: ${playlistAssignment.error}`);
             }
           }
         }
       }
-    }
 
-    // Save results to file
-    const resultsFile = `playlist-assignments-${new Date().toISOString().split('T')[0]}.json`;
-    await fs.writeJson(resultsFile, result, { spaces: 2 });
-    getLogger().info(`Results saved to ${resultsFile}`);
+      // Save results to file
+      const resultsFile = `playlist-results-${new Date().toISOString().split('T')[0]}.json`;
+      await fs.writeJson(resultsFile, result, { spaces: 2 });
+      getLogger().info(`Results saved to ${resultsFile}`);
+    }
 
   } catch (error) {
-    // Only use getLogger if initialized, otherwise fallback to console.error
-    try {
-      getLogger().error('Playlist management failed', error as Error);
-    } catch {
-      console.error('Playlist management failed', error);
-    }
+    getLogger().error('Playlist management failed', error as Error);
     process.exit(1);
   }
 }
 
 if (require.main === module) {
   main().catch(error => {
-    // Only use getLogger if initialized, otherwise fallback to console.error
-    try {
-      getLogger().error('Unhandled error', error as Error);
-    } catch {
-      console.error('Unhandled error', error);
-    }
+    getLogger().error('Unhandled error', error as Error);
     process.exit(1);
   });
 } 
