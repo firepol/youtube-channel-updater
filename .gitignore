@@ -23,6 +23,9 @@ logs/
 # Data storage (contains sensitive information)
 data/
 
+# Config files
+config/
+
 # Runtime data
 pids/
 *.pid

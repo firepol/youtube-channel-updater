@@ -165,6 +165,50 @@ export class ConfigLoader {
   }
 
   /**
+   * Load basic configuration without playlist or video processing configs
+   */
+  async loadBasicConfig(): Promise<Pick<AppConfig, 'youtube' | 'app' | 'rateLimiting' | 'paths'>> {
+    try {
+      // Load environment variables
+      const env = await this.loadEnvironmentVariables();
+
+      return {
+        youtube: {
+          apiKey: env.YOUTUBE_API_KEY,
+          clientId: env.YOUTUBE_CLIENT_ID,
+          clientSecret: env.YOUTUBE_CLIENT_SECRET,
+          redirectUri: env.YOUTUBE_REDIRECT_URI,
+          channelId: env.YOUTUBE_CHANNEL_ID
+        },
+        app: {
+          verbose: env.VERBOSE,
+          logLevel: env.LOG_LEVEL
+        },
+        rateLimiting: {
+          maxRetries: env.MAX_RETRIES,
+          retryDelayMs: env.RETRY_DELAY_MS,
+          apiCallDelayMs: env.API_CALL_DELAY_MS
+        },
+        paths: {
+          videosDb: env.VIDEOS_DB_PATH,
+          history: env.HISTORY_PATH,
+          playlistsDir: env.PLAYLISTS_DIR,
+          logsDir: env.LOGS_DIR
+        }
+      };
+    } catch (error) {
+      // Safe logger call - don't fail if logger isn't initialized yet
+      try {
+        getLogger().error('Failed to load basic configuration', error as Error);
+      } catch (loggerError) {
+        // Logger not initialized yet, use console as fallback
+        console.error('Failed to load basic configuration:', error);
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Load and validate environment variables
    */
   private async loadEnvironmentVariables(): Promise<z.infer<typeof EnvSchema>> {

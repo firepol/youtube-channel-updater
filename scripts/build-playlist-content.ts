@@ -25,6 +25,9 @@ class PlaylistContentBuilder {
    */
   async initialize(): Promise<void> {
     try {
+      // Ensure playlists directory exists
+      await fs.ensureDir(this.playlistsDir);
+
       // Load configuration
       const configLoader = new ConfigLoader();
       this.config = await configLoader.loadConfig();

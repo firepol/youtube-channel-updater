@@ -381,15 +381,51 @@ export class YouTubeClient {
   async getPlaylists(pageToken?: string, maxResults: number = 50): Promise<YouTubeApiResponse<YouTubePlaylist>> {
     return this.executeApiCall(
       async () => {
-        const response = await this.youtube.playlists.list({
-          key: this.apiKey,
+        // Use OAuth if available, otherwise fall back to API key
+        const auth = this.isAuthenticated() ? this.oauth2Client : undefined;
+        const params: any = {
           part: ['snippet', 'contentDetails'],
-          channelId: this.channelId,
           maxResults,
           pageToken
-        });
+        };
 
-        return response.data as YouTubeApiResponse<YouTubePlaylist>;
+        // Add authentication method and appropriate parameters
+        if (auth) {
+          // Use OAuth with mine=true to get all playlists including unlisted
+          params.auth = auth;
+          params.mine = true;
+        } else {
+          // Use API key with channelId (may not show all unlisted playlists)
+          params.key = this.apiKey;
+          params.channelId = this.channelId;
+        }
+
+        const response = await this.youtube.playlists.list(params);
+
+        // Map the response to our expected format
+        const playlists: YouTubePlaylist[] = (response.data.items || []).map((item: any) => ({
+          id: item.id,
+          title: item.snippet?.title || 'Untitled Playlist',
+          description: item.snippet?.description || '',
+          publishedAt: item.snippet?.publishedAt || new Date().toISOString(),
+          thumbnails: item.snippet?.thumbnails || {},
+          channelId: item.snippet?.channelId || this.channelId,
+          channelTitle: item.snippet?.channelTitle || '',
+          privacyStatus: item.snippet?.privacyStatus || 'private',
+          itemCount: item.contentDetails?.itemCount || 0,
+          tags: item.snippet?.tags || [],
+          defaultLanguage: item.snippet?.defaultLanguage,
+          localized: item.snippet?.localized
+        }));
+
+        return {
+          kind: response.data.kind || '',
+          etag: response.data.etag || '',
+          nextPageToken: response.data.nextPageToken,
+          prevPageToken: response.data.prevPageToken,
+          pageInfo: response.data.pageInfo || { totalResults: 0, resultsPerPage: 0 },
+          items: playlists
+        };
       },
       1, // API cost
       'getPlaylists'

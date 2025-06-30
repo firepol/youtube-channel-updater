@@ -18,7 +18,8 @@
     "filter-videos": "tsx scripts/filter-videos.ts",
     "process-videos": "tsx scripts/process-videos.ts",
     "manage-playlists": "tsx scripts/manage-playlists.ts",
-    "update-videos": "tsx scripts/update-videos.ts"
+    "update-videos": "tsx scripts/update-videos.ts",
+    "setup-oauth": "tsx scripts/setup-oauth.ts"
   },
   "keywords": [
     "youtube",

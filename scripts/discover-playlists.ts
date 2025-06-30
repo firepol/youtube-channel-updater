@@ -24,26 +24,26 @@ class PlaylistDiscoverer {
    */
   async initialize(): Promise<void> {
     try {
-      // Load configuration
+      // Load basic configuration (without playlist config)
       const configLoader = new ConfigLoader();
-      this.config = await configLoader.loadConfig();
+      const basicConfig = await configLoader.loadBasicConfig();
 
       // Initialize logger
       this.logger = initializeLogger({
-        verbose: this.config.app.verbose,
-        logLevel: this.config.app.logLevel as LogLevel,
-        logsDir: this.config.paths.logsDir
+        verbose: basicConfig.app.verbose,
+        logLevel: basicConfig.app.logLevel as LogLevel,
+        logsDir: basicConfig.paths.logsDir
       });
 
       // Initialize YouTube client
       this.youtubeClient = new YouTubeClient(
-        this.config.youtube.apiKey,
-        this.config.youtube.clientId,
-        this.config.youtube.clientSecret,
-        this.config.youtube.channelId,
-        this.config.rateLimiting.maxRetries,
-        this.config.rateLimiting.retryDelayMs,
-        this.config.rateLimiting.apiCallDelayMs
+        basicConfig.youtube.apiKey,
+        basicConfig.youtube.clientId,
+        basicConfig.youtube.clientSecret,
+        basicConfig.youtube.channelId,
+        basicConfig.rateLimiting.maxRetries,
+        basicConfig.rateLimiting.retryDelayMs,
+        basicConfig.rateLimiting.apiCallDelayMs
       );
 
       // Load OAuth tokens if available
@@ -66,13 +66,38 @@ class PlaylistDiscoverer {
   /**
    * Sanitize playlist name for file naming
    */
-  private sanitizePlaylistName(name: string): string {
+  private sanitizePlaylistName(name: string | undefined | null): string {
+    if (!name) {
+      return 'untitled_playlist';
+    }
+    
     return name
       .replace(/[^a-zA-Z0-9\s-_]/g, '') // Remove special characters
       .replace(/\s+/g, '_') // Replace spaces with underscores
       .replace(/_+/g, '_') // Replace multiple underscores with single
       .toLowerCase()
       .trim();
+  }
+
+  /**
+   * Correct privacy status based on playlist title and other indicators
+   */
+  private correctPrivacyStatus(playlist: YouTubePlaylist): string {
+    const title = playlist.title?.toLowerCase() || '';
+    
+    // Check for explicit unlisted indicators in title
+    if (title.includes('unlisted') || title.includes('(unlisted)')) {
+      return 'unlisted';
+    }
+    
+    // Check for explicit private indicators in title
+    if (title.includes('private') || title.includes('(private)')) {
+      return 'private';
+    }
+    
+    // Most playlists are likely public unless explicitly marked otherwise
+    // You can customize this logic based on your channel's patterns
+    return 'public';
   }
 
   /**
@@ -84,10 +109,10 @@ class PlaylistDiscoverer {
     
     const playlistData = {
       id: playlist.id,
-      title: playlist.title,
-      description: playlist.description,
-      privacyStatus: playlist.privacyStatus,
-      itemCount: playlist.itemCount,
+      title: playlist.title || 'Untitled Playlist',
+      description: playlist.description || '',
+      privacyStatus: this.correctPrivacyStatus(playlist),
+      itemCount: playlist.itemCount || 0,
       items: []
     };
 
@@ -95,7 +120,7 @@ class PlaylistDiscoverer {
       await fs.writeJson(filePath, playlistData, { spaces: 2 });
       this.logger.verbose(`Created playlist file: ${filePath}`);
     } catch (error) {
-      this.logger.error(`Failed to create playlist file for ${playlist.title}`, error as Error);
+      this.logger.error(`Failed to create playlist file for ${playlist.title || 'untitled'}`, error as Error);
     }
   }
 
@@ -105,10 +130,10 @@ class PlaylistDiscoverer {
   private generatePlaylistConfig(playlists: YouTubePlaylist[]): PlaylistConfig {
     const playlistRules: PlaylistRule[] = playlists.map(playlist => ({
       id: playlist.id,
-      title: playlist.title,
-      description: playlist.description,
+      title: playlist.title || 'Untitled Playlist',
+      description: playlist.description || '',
       keywords: [], // Empty keywords array for manual configuration
-      visibility: playlist.privacyStatus as 'public' | 'private' | 'unlisted'
+      visibility: (playlist.privacyStatus as 'public' | 'private' | 'unlisted') || 'private'
     }));
 
     return { playlists: playlistRules };
@@ -120,6 +145,13 @@ class PlaylistDiscoverer {
   async discoverPlaylists(): Promise<void> {
     try {
       this.logger.info('Starting playlist discovery...');
+
+      // Log authentication status
+      const isAuthenticated = this.youtubeClient.isAuthenticated();
+      this.logger.info(`OAuth authentication: ${isAuthenticated ? 'Available' : 'Not available'}`);
+      if (!isAuthenticated) {
+        this.logger.warning('OAuth not available. Some unlisted playlists may not be visible.');
+      }
 
       const allPlaylists: YouTubePlaylist[] = [];
       let pageToken: string | undefined;
@@ -140,6 +172,10 @@ class PlaylistDiscoverer {
 
           // Process playlists from this page
           for (const playlist of response.items) {
+            const correctedPrivacy = this.correctPrivacyStatus(playlist);
+            // Temporary debug: Log each playlist found with both API and corrected privacy status
+            console.log(`Found playlist: "${playlist.title}" (${correctedPrivacy}) - ${playlist.id}`);
+            
             allPlaylists.push(playlist);
             
             // Create empty JSON file for each playlist
@@ -200,7 +236,7 @@ class PlaylistDiscoverer {
       this.logger.info('Discovered playlists:');
       for (const playlist of allPlaylists) {
         const sanitizedName = this.sanitizePlaylistName(playlist.title);
-        this.logger.info(`  - ${playlist.title} (${playlist.itemCount} items) -> ${sanitizedName}.json`);
+        this.logger.info(`  - ${playlist.title || 'Untitled Playlist'} (${playlist.itemCount || 0} items) -> ${sanitizedName}.json`);
       }
 
     } catch (error) {
