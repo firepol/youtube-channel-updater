@@ -8,27 +8,27 @@ import { initializeLogger, LogLevel } from '../src/utils/logger';
 import { LocalVideo } from '../src/types/api-types';
 
 // Filter rule interface
-interface FilterRule {
+export interface FilterRule {
   type: string;
   value: string | number | boolean;
   caseSensitive?: boolean;
 }
 
 // Filter result interface
-interface FilterResult {
+export interface FilterResult {
   videoId: string;
   title: string;
   description: string;
   matchedRules: string[];
-  recordingDate?: string;
+  recordingDate?: string | undefined;
   privacyStatus: string;
-  uploadStatus?: string;
-  processingStatus?: string;
+  uploadStatus?: string | undefined;
+  processingStatus?: string | undefined;
   statistics?: {
     viewCount: string;
     likeCount: string;
     commentCount: string;
-  };
+  } | undefined;
 }
 
 // Filter configuration interface
@@ -42,7 +42,7 @@ interface MainFilterConfig {
   [key: string]: FilterConfig;
 }
 
-class VideoFilter {
+export class VideoFilter {
   private config: any;
   private logger: any;
   private videos: LocalVideo[] = [];
@@ -554,6 +554,37 @@ class VideoFilter {
     };
 
     console.log(JSON.stringify(output, null, 2));
+  }
+
+  /**
+   * Get filtered videos as LocalVideo objects
+   */
+  async getFilteredVideos(filters: FilterRule[]): Promise<LocalVideo[]> {
+    await this.initialize();
+    return this.applyFilters(this.videos, filters);
+  }
+
+  /**
+   * Get filtered videos as LocalVideo objects from config
+   */
+  async getFilteredVideosFromConfig(configPath: string): Promise<LocalVideo[]> {
+    await this.initialize();
+    
+    try {
+      const config = await fs.readJson(configPath) as MainFilterConfig;
+      
+      for (const [name, filterConfig] of Object.entries(config)) {
+        if (filterConfig.enabled && filterConfig.filters.length > 0) {
+          this.logger.info(`Applying filter configuration: ${name}`);
+          return this.applyFilters(this.videos, filterConfig.filters);
+        }
+      }
+      
+      throw new Error('No enabled filter configuration found');
+    } catch (error) {
+      this.logger.error('Failed to filter from configuration', error as Error);
+      throw error;
+    }
   }
 }
 

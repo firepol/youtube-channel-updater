@@ -11,6 +11,7 @@ import {
 import { YouTubeClient } from '../src/api/youtube-client';
 import { loadConfig } from '../src/config/config-loader';
 import { getLogger, logVerbose } from '../src/utils/logger';
+import { VideoFilter, FilterRule } from './filter-videos';
 
 interface ProcessingResult {
   processedVideos: number;
@@ -33,6 +34,15 @@ interface ProcessingOptions {
   force: boolean;
   verbose: boolean;
   output?: string; // Output file for dry-run reports
+  // Filtering options
+  filterConfig?: string; // Filter configuration file
+  privacyStatus?: string; // Direct privacy status filter
+  publishedAfter?: string; // Direct date filter
+  publishedBefore?: string; // Direct date filter
+  titleContains?: string; // Direct title filter
+  descriptionContains?: string; // Direct description filter
+  minViews?: number; // Direct views filter
+  maxViews?: number; // Direct views filter
 }
 
 interface DryRunPreview {
@@ -751,6 +761,14 @@ async function main(): Promise<void> {
     .option('--force', 'Force processing even if metadata version matches')
     .option('--verbose', 'Enable verbose logging')
     .option('-o, --output <file>', 'Output file for dry-run reports')
+    .option('--filter-config <file>', 'Filter configuration file')
+    .option('--privacy-status <status>', 'Direct privacy status filter')
+    .option('--published-after <date>', 'Direct date filter')
+    .option('--published-before <date>', 'Direct date filter')
+    .option('--title-contains <text>', 'Direct title filter')
+    .option('--description-contains <text>', 'Direct description filter')
+    .option('--min-views <number>', 'Direct views filter')
+    .option('--max-views <number>', 'Direct views filter')
     .parse();
 
   const options: ProcessingOptions = program.opts();
@@ -799,14 +817,62 @@ async function main(): Promise<void> {
       }
       videos = [video];
     } else if (options.input) {
-      // Process filtered videos
+      // Process filtered videos from input file
       if (!await fs.pathExists(options.input)) {
         getLogger().error(`Input file ${options.input} not found`);
         process.exit(1);
       }
       videos = await fs.readJson(options.input) as LocalVideo[];
+    } else if (options.filterConfig || options.privacyStatus || options.publishedAfter || 
+               options.publishedBefore || options.titleContains || options.descriptionContains || 
+               options.minViews !== undefined || options.maxViews !== undefined) {
+      // Filter videos directly from channel database
+      getLogger().info('Filtering videos directly from channel database...');
+      
+      const videoFilter = new VideoFilter();
+      
+      if (options.filterConfig) {
+        // Use filter configuration file
+        if (!await fs.pathExists(options.filterConfig)) {
+          getLogger().error(`Filter configuration file ${options.filterConfig} not found`);
+          process.exit(1);
+        }
+        videos = await videoFilter.getFilteredVideosFromConfig(options.filterConfig);
+      } else {
+        // Build filters from command line options
+        const filters: FilterRule[] = [];
+        
+        const addFilter = (type: string, value: any) => {
+          if (value !== undefined) {
+            // Convert string numbers to actual numbers
+            if (typeof value === 'string' && !isNaN(Number(value)) && 
+                (type.includes('views'))) {
+              value = Number(value);
+            }
+            filters.push({ type, value });
+          }
+        };
+        
+        addFilter('privacy_status', options.privacyStatus);
+        addFilter('published_after', options.publishedAfter);
+        addFilter('published_before', options.publishedBefore);
+        addFilter('title_contains', options.titleContains);
+        addFilter('description_contains', options.descriptionContains);
+        addFilter('min_views', options.minViews);
+        addFilter('max_views', options.maxViews);
+        
+        if (filters.length === 0) {
+          getLogger().error('No valid filters specified');
+          process.exit(1);
+        }
+        
+        videos = await videoFilter.getFilteredVideos(filters);
+      }
+      
+      getLogger().info(`Found ${videos.length} videos matching filter criteria`);
     } else {
-      getLogger().error('Either --input or --video-id must be specified');
+      getLogger().error('Either --input, --video-id, --filter-config, or direct filter options must be specified');
+      getLogger().error('Use --help for available filtering options');
       process.exit(1);
     }
     

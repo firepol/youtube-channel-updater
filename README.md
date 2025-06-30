@@ -285,11 +285,24 @@ npx tsx scripts/process-videos.ts [options]
 - `--dry-run` - Show what would be changed without making API calls
 - `--force` - Force processing even if metadata version matches
 - `--verbose` - Enable verbose logging
+- `-o, --output <file>` - Output file for dry-run reports
+
+**Direct Filtering Options** (no input file needed):
+- `--filter-config <file>` - Filter configuration file
+- `--privacy-status <status>` - Direct privacy status filter
+- `--published-after <date>` - Direct date filter (YYYY-MM-DD)
+- `--published-before <date>` - Direct date filter (YYYY-MM-DD)
+- `--title-contains <text>` - Direct title filter
+- `--description-contains <text>` - Direct description filter
+- `--min-views <number>` - Direct views filter
+- `--max-views <number>` - Direct views filter
 
 **Examples**:
 - `npm run process-videos -- --input filtered-videos.json` - Process filtered videos
 - `npm run process-videos -- --video-id VIDEO_ID --dry-run` - Preview specific video changes
 - `npm run process-videos -- --input filtered-videos.json --force` - Force process all videos
+- `npm run process-videos -- --privacy-status unlisted --dry-run` - Preview unlisted video changes
+- `npm run process-videos -- --title-contains "tutorial" --min-views 100 --dry-run` - Preview tutorial videos with 100+ views
 
 **Features**:
 - Title and description transformation
@@ -297,6 +310,7 @@ npx tsx scripts/process-videos.ts [options]
 - Backup system integration
 - Change history tracking
 - Tag generation
+- Direct filtering from channel database
 
 ### 7. Playlist Management
 
@@ -318,17 +332,31 @@ npx tsx scripts/manage-playlists.ts [options]
 - `--dry-run` - Show what would be done without making changes
 - `--refresh-cache` - Force refresh playlist cache from YouTube API
 - `-v, --verbose` - Enable verbose logging
+- `-o, --output <file>` - Output file for dry-run reports
+
+**Direct Filtering Options** (no input file needed):
+- `--filter-config <file>` - Filter configuration file
+- `--privacy-status <status>` - Direct privacy status filter
+- `--published-after <date>` - Direct date filter (YYYY-MM-DD)
+- `--published-before <date>` - Direct date filter (YYYY-MM-DD)
+- `--title-contains <text>` - Direct title filter
+- `--description-contains <text>` - Direct description filter
+- `--min-views <number>` - Direct views filter
+- `--max-views <number>` - Direct views filter
 
 **Examples**:
 - `npm run manage-playlists -- --input processed-videos.json` - Add videos to playlists
 - `npm run manage-playlists -- --video-id VIDEO_ID --dry-run` - Preview playlist assignment
 - `npm run manage-playlists -- --refresh-cache` - Refresh playlist cache
+- `npm run manage-playlists -- --privacy-status unlisted --dry-run` - Preview unlisted video playlist assignments
+- `npm run manage-playlists -- --title-contains "DZ" --min-views 1000 --dry-run` - Preview high-view DZ video assignments
 
 **Features**:
 - Keyword-based playlist matching
 - Chronological position calculation
 - Cache management for efficiency
 - Detailed assignment reporting
+- Direct filtering from channel database
 
 ## Complete Workflow
 
@@ -358,6 +386,8 @@ npx tsx scripts/manage-playlists.ts [options]
 
 ### Regular Updates
 
+#### Option 1: Traditional Workflow (with input files)
+
 1. **Update video database** (gets new videos)
    ```bash
    npm run build:video-db
@@ -378,6 +408,138 @@ npx tsx scripts/manage-playlists.ts [options]
    ```bash
    npm run manage-playlists -- --input processed-videos.json
    ```
+
+#### Option 2: Enhanced Workflow (direct filtering)
+
+**Direct filtering allows you to process videos without creating intermediate files:**
+
+1. **Update video database** (gets new videos)
+   ```bash
+   npm run build:video-db
+   ```
+
+2. **Process videos with direct filtering**
+   ```bash
+   # Process all unlisted videos
+   npm run process-videos -- --privacy-status unlisted --dry-run
+   
+   # Process videos with specific criteria
+   npm run process-videos -- --privacy-status unlisted --title-contains "tutorial" --dry-run
+   
+   # Process videos from a date range
+   npm run process-videos -- --published-after 2024-01-01 --published-before 2024-12-31 --dry-run
+   ```
+
+3. **Manage playlists with direct filtering**
+   ```bash
+   # Add unlisted videos to playlists
+   npm run manage-playlists -- --privacy-status unlisted --dry-run
+   
+   # Add videos matching specific criteria to playlists
+   npm run manage-playlists -- --title-contains "DZ" --min-views 1000 --dry-run
+   ```
+
+#### Option 3: Mixed Workflow (best of both worlds)
+
+1. **Update video database**
+   ```bash
+   npm run build:video-db
+   ```
+
+2. **Preview with direct filtering**
+   ```bash
+   # Preview what would be processed
+   npm run process-videos -- --privacy-status unlisted --dry-run --output preview.json
+   
+   # Review the preview report
+   cat preview.json
+   ```
+
+3. **Process with confidence**
+   ```bash
+   # Run actual processing
+   npm run process-videos -- --privacy-status unlisted
+   
+   # Manage playlists
+   npm run manage-playlists -- --privacy-status unlisted
+   ```
+
+### Available Direct Filter Options
+
+Both `process-videos.ts` and `manage-playlists.ts` support these direct filter options:
+
+**Privacy & Status Filters:**
+- `--privacy-status <status>` - Filter by privacy (public, private, unlisted)
+- `--upload-status <status>` - Filter by upload status
+- `--processing-status <status>` - Filter by processing status
+
+**Date Filters:**
+- `--published-after <YYYY-MM-DD>` - Videos published after date
+- `--published-before <YYYY-MM-DD>` - Videos published before date
+
+**Content Filters:**
+- `--title-contains <text>` - Title contains specific text
+- `--description-contains <text>` - Description contains specific text
+
+**Statistics Filters:**
+- `--min-views <number>` - Minimum view count
+- `--max-views <number>` - Maximum view count
+
+**Configuration Files:**
+- `--filter-config <file>` - Use complex filter configuration file
+
+### Workflow Examples
+
+**Example 1: Process all unlisted videos**
+```bash
+# Preview what would be changed
+npm run process-videos -- --privacy-status unlisted --dry-run --output unlisted-preview.json
+
+# Review the preview
+cat unlisted-preview.json
+
+# Apply the changes
+npm run process-videos -- --privacy-status unlisted
+
+# Add to playlists
+npm run manage-playlists -- --privacy-status unlisted
+```
+
+**Example 2: Process recent videos with low views**
+```bash
+# Process videos from last month with less than 1000 views
+npm run process-videos -- --published-after 2024-11-01 --max-views 1000 --dry-run
+
+# Apply changes
+npm run process-videos -- --published-after 2024-11-01 --max-views 1000
+```
+
+**Example 3: Process specific content types**
+```bash
+# Process all tutorial videos
+npm run process-videos -- --title-contains "tutorial" --dry-run
+
+# Process gaming content with high engagement
+npm run process-videos -- --title-contains "gaming" --min-views 500 --dry-run
+```
+
+**Example 4: Use filter configuration file**
+```bash
+# Create a filter config file for complex criteria
+echo '{
+  "unlisted_tutorials": {
+    "enabled": true,
+    "filters": [
+      {"type": "privacy_status", "value": "unlisted"},
+      {"type": "title_contains", "value": "tutorial"},
+      {"type": "min_views", "value": 100}
+    ]
+  }
+}' > my-filters.json
+
+# Use the configuration
+npm run process-videos -- --filter-config my-filters.json --dry-run
+```
 
 ## File Structures
 
