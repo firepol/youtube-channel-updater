@@ -28,26 +28,26 @@ class PlaylistContentBuilder {
       // Ensure playlists directory exists
       await fs.ensureDir(this.playlistsDir);
 
-      // Load configuration
+      // Load basic configuration (without playlist config)
       const configLoader = new ConfigLoader();
-      this.config = await configLoader.loadConfig();
+      const basicConfig = await configLoader.loadBasicConfig();
 
       // Initialize logger
       this.logger = initializeLogger({
-        verbose: this.config.app.verbose,
-        logLevel: this.config.app.logLevel as LogLevel,
-        logsDir: this.config.paths.logsDir
+        verbose: basicConfig.app.verbose,
+        logLevel: basicConfig.app.logLevel as LogLevel,
+        logsDir: basicConfig.paths.logsDir
       });
 
       // Initialize YouTube client
       this.youtubeClient = new YouTubeClient(
-        this.config.youtube.apiKey,
-        this.config.youtube.clientId,
-        this.config.youtube.clientSecret,
-        this.config.youtube.channelId,
-        this.config.rateLimiting.maxRetries,
-        this.config.rateLimiting.retryDelayMs,
-        this.config.rateLimiting.apiCallDelayMs
+        basicConfig.youtube.apiKey,
+        basicConfig.youtube.clientId,
+        basicConfig.youtube.clientSecret,
+        basicConfig.youtube.channelId,
+        basicConfig.rateLimiting.maxRetries,
+        basicConfig.rateLimiting.retryDelayMs,
+        basicConfig.rateLimiting.apiCallDelayMs
       );
 
       // Load OAuth tokens if available
