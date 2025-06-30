@@ -442,15 +442,51 @@ export class YouTubeClient {
   ): Promise<YouTubeApiResponse<YouTubePlaylistItem>> {
     return this.executeApiCall(
       async () => {
-        const response = await this.youtube.playlistItems.list({
-          key: this.apiKey,
+        // Use OAuth if available, otherwise fall back to API key
+        const auth = this.isAuthenticated() ? this.oauth2Client : undefined;
+        const params: any = {
           part: ['snippet'],
           playlistId,
           maxResults,
           pageToken
-        });
+        };
 
-        return response.data as YouTubeApiResponse<YouTubePlaylistItem>;
+        // Add authentication method
+        if (auth) {
+          params.auth = auth;
+        } else {
+          params.key = this.apiKey;
+        }
+
+        const response = await this.youtube.playlistItems.list(params);
+
+        // Map the response to our expected format
+        const playlistItems: YouTubePlaylistItem[] = (response.data.items || []).map((item: any) => ({
+          id: item.id,
+          playlistId: item.snippet?.playlistId || playlistId,
+          position: item.snippet?.position || 0,
+          publishedAt: item.snippet?.publishedAt || new Date().toISOString(),
+          channelId: item.snippet?.channelId || this.channelId,
+          channelTitle: item.snippet?.channelTitle || '',
+          title: item.snippet?.title || '',
+          description: item.snippet?.description || '',
+          thumbnails: item.snippet?.thumbnails || {},
+          resourceId: {
+            kind: item.snippet?.resourceId?.kind || 'youtube#video',
+            videoId: item.snippet?.resourceId?.videoId || ''
+          },
+          videoOwnerChannelTitle: item.snippet?.videoOwnerChannelTitle,
+          videoOwnerChannelId: item.snippet?.videoOwnerChannelId
+        }));
+
+        return {
+          kind: response.data.kind || '',
+          etag: response.data.etag || '',
+          nextPageToken: response.data.nextPageToken,
+          prevPageToken: response.data.prevPageToken,
+          pageInfo: response.data.pageInfo || { totalResults: 0, resultsPerPage: 0 },
+          items: playlistItems
+        };
       },
       1, // API cost
       'getPlaylistItems'

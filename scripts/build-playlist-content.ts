@@ -139,6 +139,11 @@ class PlaylistContentBuilder {
             break;
           }
 
+          // Debug: Log first item structure
+          if (pageCount === 1 && response.items.length > 0) {
+            this.logger.verbose(`First playlist item structure: ${JSON.stringify(response.items[0], null, 2)}`);
+          }
+
           // Process items from this page
           for (const item of response.items) {
             const localItem = this.convertToLocalPlaylistItem(item);
@@ -330,4 +335,4 @@ async function main() {
 // Run if called directly
 if (require.main === module) {
   main();
-} 
+}
