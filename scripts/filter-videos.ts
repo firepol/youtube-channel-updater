@@ -48,13 +48,10 @@ export class VideoFilter {
   private videos: LocalVideo[] = [];
 
   constructor() {
-    this.initialize();
+    // Do not call this.initialize() here!
   }
 
-  /**
-   * Initialize the filter
-   */
-  private async initialize(): Promise<void> {
+  async initialize(): Promise<void> {
     try {
       // Load configuration
       const configLoader = new ConfigLoader();
@@ -690,6 +687,8 @@ async function main() {
   program.parse();
 
   const options = program.opts();
+
+  await filter.initialize();
 
   try {
     // Handle configuration file
