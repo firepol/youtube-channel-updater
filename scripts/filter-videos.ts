@@ -46,27 +46,19 @@ export class VideoFilter {
   private config: any;
   private logger: any;
   private videos: LocalVideo[] = [];
-  private cliVerboseOverride: boolean = false;
 
-  constructor(cliVerboseOverride = false) {
-    this.cliVerboseOverride = cliVerboseOverride;
+  constructor() {
+    this.initialize();
   }
 
   /**
    * Initialize the filter
    */
   private async initialize(): Promise<void> {
-    if (this.logger && this.videos.length > 0) return; // Prevent double init
     try {
       // Load configuration
       const configLoader = new ConfigLoader();
       this.config = await configLoader.loadConfig();
-
-      // CLI override for verbose
-      if (this.cliVerboseOverride) {
-        this.config.app.verbose = true;
-        this.config.app.logLevel = 'verbose';
-      }
 
       // Initialize logger
       this.logger = initializeLogger({
@@ -159,10 +151,8 @@ export class VideoFilter {
     
     switch (type) {
       case 'privacy_status':
-        this.logger.verbose(`[DEBUG] Comparing video.privacyStatus (${video.privacyStatus}) === value (${value}) for videoId: ${video.id}`);
         return video.privacyStatus === value;
       case 'privacy_status_not':
-        this.logger.verbose(`[DEBUG] Comparing video.privacyStatus (${video.privacyStatus}) !== value (${value}) for videoId: ${video.id}`);
         return video.privacyStatus !== value;
       case 'upload_status':
         return video.uploadStatus === value;
@@ -475,7 +465,6 @@ export class VideoFilter {
    * Filter videos based on command line arguments
    */
   async filterFromArgs(filters: FilterRule[], preview: boolean = false): Promise<void> {
-    await this.initialize();
     try {
       this.logger.info(`Applying ${filters.length} filter(s) to ${this.videos.length} videos...`);
 
@@ -505,7 +494,6 @@ export class VideoFilter {
    * Filter videos from configuration file
    */
   async filterFromConfig(configPath: string, preview: boolean = false): Promise<void> {
-    await this.initialize();
     try {
       if (!await fs.pathExists(configPath)) {
         throw new Error(`Configuration file not found: ${configPath}`);
@@ -581,14 +569,17 @@ export class VideoFilter {
    */
   async getFilteredVideosFromConfig(configPath: string): Promise<LocalVideo[]> {
     await this.initialize();
+    
     try {
       const config = await fs.readJson(configPath) as MainFilterConfig;
+      
       for (const [name, filterConfig] of Object.entries(config)) {
         if (filterConfig.enabled && filterConfig.filters.length > 0) {
           this.logger.info(`Applying filter configuration: ${name}`);
           return this.applyFilters(this.videos, filterConfig.filters);
         }
       }
+      
       throw new Error('No enabled filter configuration found');
     } catch (error) {
       this.logger.error('Failed to filter from configuration', error as Error);
@@ -600,6 +591,8 @@ export class VideoFilter {
 // Command line interface
 async function main() {
   const program = new Command();
+  const filter = new VideoFilter();
+
   program
     .name('filter-videos')
     .description('Filter YouTube videos based on various criteria')
@@ -695,113 +688,58 @@ async function main() {
   program.option('--verbose', 'Verbose output');
 
   program.parse();
+
   const options = program.opts();
-  const filter = new VideoFilter(options.verbose);
 
-  // Handle configuration file
-  if (options.config) {
-    await filter.filterFromConfig(options.config, options.preview);
-    return;
+  try {
+    // Handle configuration file
+    if (options.config) {
+      await filter.filterFromConfig(options.config, options.preview);
+      return;
+    }
+
+    // Build filters from command line options
+    const filters: FilterRule[] = [];
+
+    // Helper function to add filter
+    const addFilter = (type: string, value: any) => {
+      if (value !== undefined) {
+        // Convert string booleans to actual booleans
+        if (value === 'true') value = true;
+        if (value === 'false') value = false;
+        
+        // Convert string numbers to actual numbers
+        if (typeof value === 'string' && !isNaN(Number(value)) && 
+            (type.includes('views') || type.includes('likes') || type.includes('comments'))) {
+          value = Number(value);
+        }
+
+        filters.push({ type, value });
+      }
+    };
+
+    // Add all filters from options
+    Object.entries(options).forEach(([key, value]) => {
+      if (key === 'preview' || key === 'config' || key === 'verbose') return;
+      
+      // Convert kebab-case to snake_case
+      const filterType = key.replace(/-/g, '_');
+      addFilter(filterType, value);
+    });
+
+    if (filters.length === 0) {
+      console.error('No filters specified. Use --help for available options.');
+      process.exit(1);
+    }
+
+    await filter.filterFromArgs(filters, options.preview);
+  } catch (error) {
+    console.error('Error:', error);
+    process.exit(1);
   }
-
-  // Build filters from command line options
-  const filters: FilterRule[] = [];
-
-  // Helper function to add filter
-  const addFilter = (type: string, value: any) => {
-    if (value === undefined) return;
-    filters.push({ type, value });
-  };
-
-  // Text filters
-  addFilter('title_contains', options.titleContains);
-  addFilter('title_not_contains', options.titleNotContains);
-  addFilter('description_contains', options.descriptionContains);
-  addFilter('description_not_contains', options.descriptionNotContains);
-  addFilter('tags_contains', options.tagsContains);
-  addFilter('tags_not_contains', options.tagsNotContains);
-
-  // Status filters
-  addFilter('privacy_status', options.privacyStatus);
-  addFilter('privacy_status_not', options.privacyStatusNot);
-  addFilter('upload_status', options.uploadStatus);
-  addFilter('upload_status_not', options.uploadStatusNot);
-  addFilter('processing_status', options.processingStatus);
-  addFilter('processing_status_not', options.processingStatusNot);
-  addFilter('made_for_kids', options.madeForKids);
-  addFilter('made_for_kids_not', options.madeForKidsNot);
-  addFilter('embeddable', options.embeddable);
-  addFilter('embeddable_not', options.embeddableNot);
-  addFilter('public_stats_viewable', options.publicStatsViewable);
-  addFilter('public_stats_viewable_not', options.publicStatsViewableNot);
-
-  // Date filters
-  addFilter('published_after', options.publishedAfter);
-  addFilter('published_before', options.publishedBefore);
-  addFilter('published_not_after', options.publishedNotAfter);
-  addFilter('published_not_before', options.publishedNotBefore);
-  addFilter('recording_date_after', options.recordingDateAfter);
-  addFilter('recording_date_before', options.recordingDateBefore);
-  addFilter('recording_date_not_after', options.recordingDateNotAfter);
-  addFilter('recording_date_not_before', options.recordingDateNotBefore);
-  addFilter('last_processed_after', options.lastProcessedAfter);
-  addFilter('last_processed_before', options.lastProcessedBefore);
-  addFilter('last_processed_not_after', options.lastProcessedNotAfter);
-  addFilter('last_processed_not_before', options.lastProcessedNotBefore);
-
-  // Statistics filters
-  addFilter('min_views', options.minViews);
-  addFilter('max_views', options.maxViews);
-  addFilter('views_not_min', options.viewsNotMin);
-  addFilter('views_not_max', options.viewsNotMax);
-  addFilter('min_likes', options.minLikes);
-  addFilter('max_likes', options.maxLikes);
-  addFilter('likes_not_min', options.likesNotMin);
-  addFilter('likes_not_max', options.likesNotMax);
-  addFilter('min_comments', options.minComments);
-  addFilter('max_comments', options.maxComments);
-  addFilter('comments_not_min', options.commentsNotMin);
-  addFilter('comments_not_max', options.commentsNotMax);
-
-  // Content filters
-  addFilter('category_id', options.categoryId);
-  addFilter('category_id_not', options.categoryIdNot);
-  addFilter('license', options.license);
-  addFilter('license_not', options.licenseNot);
-  addFilter('definition', options.definition);
-  addFilter('definition_not', options.definitionNot);
-  addFilter('caption', options.caption);
-  addFilter('caption_not', options.captionNot);
-  addFilter('default_language', options.defaultLanguage);
-  addFilter('default_language_not', options.defaultLanguageNot);
-  addFilter('default_audio_language', options.defaultAudioLanguage);
-  addFilter('default_audio_language_not', options.defaultAudioLanguageNot);
-
-  // Metadata filters
-  addFilter('metadata_version', options.metadataVersion);
-  addFilter('metadata_version_not', options.metadataVersionNot);
-  addFilter('has_metadata_version', options.hasMetadataVersion);
-  addFilter('has_metadata_version_not', options.hasMetadataVersionNot);
-  addFilter('has_recording_date', options.hasRecordingDate);
-  addFilter('has_recording_date_not', options.hasRecordingDateNot);
-  addFilter('has_tags', options.hasTags);
-  addFilter('has_tags_not', options.hasTagsNot);
-
-  // Processing filters
-  addFilter('needs_processing', options.needsProcessing);
-  addFilter('needs_processing_not', options.needsProcessingNot);
-  addFilter('already_processed', options.alreadyProcessed);
-  addFilter('already_processed_not', options.alreadyProcessedNot);
-  addFilter('processing_failed', options.processingFailed);
-  addFilter('processing_failed_not', options.processingFailedNot);
-  addFilter('has_processing_errors', options.hasProcessingErrors);
-  addFilter('has_processing_errors_not', options.hasProcessingErrorsNot);
-
-  // Filter videos
-  await filter.filterFromArgs(filters, options.preview);
 }
 
-main().catch(error => {
-  console.error('Error:', error);
-  process.exit(1);
-});
+// Run the script
+if (require.main === module) {
+  main();
+} 
