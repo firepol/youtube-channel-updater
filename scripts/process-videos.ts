@@ -10,7 +10,7 @@ import {
 } from '../src/types/api-types';
 import { YouTubeClient } from '../src/api/youtube-client';
 import { loadConfig } from '../src/config/config-loader';
-import { getLogger, logVerbose } from '../src/utils/logger';
+import { getLogger, logVerbose, initializeLogger } from '../src/utils/logger';
 import { VideoFilter, FilterRule } from './filter-videos';
 
 interface ProcessingResult {
@@ -782,6 +782,13 @@ async function main(): Promise<void> {
   try {
     // Load configuration
     const config = await loadConfig();
+
+    // Initialize logger
+    initializeLogger({
+      verbose: config.app.verbose,
+      logLevel: config.app.logLevel as any,
+      logsDir: config.paths.logsDir
+    });
     
     // Initialize YouTube client
     const youtubeClient = new YouTubeClient(
