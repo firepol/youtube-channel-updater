@@ -36,6 +36,14 @@ class OAuthSetup {
         basicConfig.rateLimiting.apiCallDelayMs
       );
 
+      // Load OAuth tokens if available
+      const tokensLoaded = await this.youtubeClient.loadTokens();
+      if (tokensLoaded) {
+        this.logger.info('OAuth tokens loaded successfully');
+      } else {
+        this.logger.info('No OAuth tokens found - authentication required');
+      }
+
       this.logger.info('OAuth setup initialized');
     } catch (error) {
       console.error('Failed to initialize OAuth setup:', error);
