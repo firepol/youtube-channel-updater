@@ -147,10 +147,12 @@ describe('Video Processing with Named Groups', () => {
           pattern: "Tom Clancy's The Division 2 (\\d{4}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (.+)",
           replacement: "$8 / The Division 2 / $1-$2-$3"
         },
-        descriptionTransform: {
-          pattern: "Tom Clancy's The Division 2 (\\d{4}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2})",
-          replacement: "Tom Clancy's The Division 2 / $1-$2-$3 $4:$5"
-        },
+        descriptionTransforms: [
+          {
+            pattern: "Tom Clancy's\\s+The\\s+Division\\s+2\\s+(\\d{4})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(.+)",
+            replacement: "Tom Clancy's The Division 2 / $1-$2-$3 $4:$5"
+          }
+        ],
         baseTags: ['The Division 2', 'Gaming', 'Gameplay', 'Tom Clancy'],
         maxDynamicTags: 2,
         metadataVersion: 'v1.1',
@@ -163,7 +165,7 @@ describe('Video Processing with Named Groups', () => {
       };
       const processor = new VideoProcessor(mockYouTubeClient as any, config as any);
       const result = processor['transformDescription'](originalDesc, originalTitle, recordingDate);
-      expect(result).toContain("Tom Clancy's The Division 2 / 2025-01-25 21:23");
+      expect(result).toContain("Tom Clancy's The Division 2 / 2025-03-29 21:23");
       expect(result).toMatch(/\[metadata v1\.1: proc_\d{8}_\d{6}\]/);
     });
   });
@@ -176,8 +178,7 @@ describe('Video Processing with Named Groups', () => {
         { pattern: "^(\\d{4}) (\\d{2}) (\\d{2})\\s+(\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (.+)", replacement: "$8 / The Division 2 / $1-$2-$3" }
       ],
       descriptionTransforms: [
-        { pattern: "^(\\d{4})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})$", replacement: "Tom Clancy's The Division 2 / $1-$2-$3 $4:$5" },
-        { pattern: "^(\\d{4}) (\\d{2}) (\\d{2})\\s+(\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (.+)", replacement: "Tom Clancy's The Division 2 / $1-$2-$3 $4:$5" }
+        { pattern: "^Tom Clancy's\\s+The\\s+Division\\s+2\\s+(\\d{4})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(.+)$", replacement: "Tom Clancy's The Division 2 / $1-$2-$3 $4:$5 $8" }
       ],
       baseTags: ['The Division 2', 'Gaming', 'Gameplay', 'Tom Clancy'],
       maxDynamicTags: 2,
