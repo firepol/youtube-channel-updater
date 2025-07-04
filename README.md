@@ -466,10 +466,32 @@ npx tsx scripts/manage-playlists.ts [options]
    npm run filter-videos -- --needs-processing true > videos-to-process.json
    ```
 
+Here are some personal examples of video title and description transformations:
+
+- **Original Title:** `Tom Clancy's The Division 2 2025 03 09   07 33 12 03 Various activities with random group`
+- **Transformed Title:** `Tom Clancy's The Division 2 / 2025-03-09 07:33 Various activities with random group`
+
+- **Original Description:** *(empty)*
+- **Transformed Description:** `Tom Clancy's The Division 2 / 2025-03-09 07:33 Various activities with random group\n\n[metadata v1.1: proc_20250704_173137]`
+
+- **Original Title:** `Just a regular gaming video`
+- **Transformed Title:** *(unchanged)*
+
+- **Original Description:** `Just a regular description`
+- **Transformed Description:** `Just a regular description\n\n[metadata v1.1: proc_20250704_173137]`
+
 3. **Process videos**
    ```bash
    npm run process-videos -- --input videos-to-process.json
    ```
+
+Personal examples:
+
+```
+npm run filter-videos -- --preview --privacy-status public --title-contains "Tom Clancy"
+npm run filter-videos -- --preview --privacy-status public --title-contains "Tom Clancy" --title-contains "   "
+```
+
 
 4. **Manage playlists**
    ```bash

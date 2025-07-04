@@ -275,15 +275,21 @@ export interface PlaylistConfig {
   playlists: PlaylistRule[];
 }
 
+export interface TitleTransform {
+  pattern: string;
+  replacement: string;
+}
+
+export interface DescriptionTransform {
+  pattern: string;
+  replacement: string;
+}
+
 export interface VideoProcessingConfig {
-  titleTransform: {
-    pattern: string;
-    replacement: string;
-  };
-  descriptionTransform: {
-    pattern: string;
-    replacement: string;
-  };
+  titleTransform?: TitleTransform;
+  descriptionTransform?: DescriptionTransform;
+  titleTransforms?: TitleTransform[];
+  descriptionTransforms?: DescriptionTransform[];
   baseTags: string[];
   maxDynamicTags: number;
   metadataVersion: string;
@@ -293,6 +299,7 @@ export interface VideoProcessingConfig {
     categoryId: string;
     allowRemixing: boolean;
   };
+  recordingDateExtractPattern: string;
 }
 
 // Error Types

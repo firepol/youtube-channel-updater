@@ -195,88 +195,65 @@ class VideoProcessor {
   }
 
   /**
-   * Transform video title according to configuration
+   * Apply a sequence of regex transforms to a string
    */
-  private transformTitle(originalTitle: string, recordingDate?: string): string {
-    if (!recordingDate) {
-      getLogger().warning('No recording date available for title transformation');
-      return originalTitle;
+  private applyTransforms(source: string, transforms: { pattern: string; replacement: string }[]): string {
+    let result = source;
+    if (!Array.isArray(transforms)) return result;
+    for (const { pattern, replacement } of transforms) {
+      const regex = new RegExp(pattern);
+      const match = result.match(regex);
+      logVerbose(`[DEBUG] Applying pattern: ${pattern}`);
+      logVerbose(`[DEBUG] Source string: '${result}'`);
+      logVerbose(`[DEBUG] Match result: ${!!(Array.isArray(match) && match.length > 0)}`);
+      if (Array.isArray(match) && match.length > 0) {
+        let replaced = replacement;
+        for (let i = 1; i < match.length; i++) {
+          const group = typeof match[i] === 'string' ? match[i] : '';
+          replaced = replaced.replace(new RegExp(`\\$${i}`, 'g'), group);
+        }
+        result = result.replace(regex, replaced);
+      }
     }
-
-    try {
-      const pattern = new RegExp(this.config.titleTransform.pattern);
-      const replacement = this.config.titleTransform.replacement;
-      
-      // Replace date placeholders in replacement string
-      const dateObj = new Date(recordingDate);
-      const year = dateObj.getFullYear();
-      const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
-      const day = dateObj.getDate().toString().padStart(2, '0');
-      
-      let result = replacement
-        .replace(/\$1/g, year.toString())
-        .replace(/\$2/g, month)
-        .replace(/\$3/g, day);
-
-      // Apply the regex replacement
-      result = originalTitle.replace(pattern, result);
-      
-      logVerbose(`Title transformed: "${originalTitle}" → "${result}"`);
-      return result;
-    } catch (error) {
-      getLogger().error('Title transformation failed', error as Error);
-      return originalTitle;
-    }
+    return result;
   }
 
   /**
-   * Transform video description according to configuration
+   * Transform video title using multi-step transforms from config
+   */
+  private transformTitle(originalTitle: string, recordingDate?: string): string {
+    const transforms: { pattern: string; replacement: string }[] = Array.isArray(this.config.titleTransforms)
+      ? this.config.titleTransforms
+      : this.config.titleTransform ? [this.config.titleTransform] : [];
+    if (!Array.isArray(transforms)) return originalTitle;
+    if (!recordingDate) {
+      getLogger().warning('No recording date available for title transformation');
+      return this.applyTransforms(originalTitle, transforms);
+    }
+    return this.applyTransforms(originalTitle, transforms);
+  }
+
+  /**
+   * Transform video description using multi-step transforms from config
    */
   private transformDescription(originalDesc: string, originalTitle: string, recordingDate?: string): string {
+    const transforms: { pattern: string; replacement: string }[] = Array.isArray(this.config.descriptionTransforms)
+      ? this.config.descriptionTransforms
+      : this.config.descriptionTransform ? [this.config.descriptionTransform] : [];
+    if (!Array.isArray(transforms)) return originalDesc;
     if (!recordingDate) {
       getLogger().warning('No recording date available for description transformation');
-      return originalDesc;
-    }
-
-    try {
-      const pattern = new RegExp(this.config.descriptionTransform.pattern);
-      const replacement = this.config.descriptionTransform.replacement;
-
-      // Use title as source if description is empty
       const source = (!originalDesc || originalDesc.trim() === '') ? originalTitle : originalDesc;
-
-      // Replace date placeholders in replacement string
-      const dateObj = new Date(recordingDate);
-      const year = dateObj.getFullYear();
-      const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
-      const day = dateObj.getDate().toString().padStart(2, '0');
-      const hour = dateObj.getHours().toString().padStart(2, '0');
-      const minute = dateObj.getMinutes().toString().padStart(2, '0');
-
-      let result = replacement
-        .replace(/\$1/g, year.toString())
-        .replace(/\$2/g, month)
-        .replace(/\$3/g, day)
-        .replace(/\$4/g, hour)
-        .replace(/\$5/g, minute);
-
-      // Apply the regex replacement
-      result = source.replace(pattern, result);
-
-      // Add metadata version tag
-      const processingId = this.generateProcessingId();
-      const metadataTag = `[metadata ${this.config.metadataVersion}: ${processingId}]`;
-
-      if (!result.includes('[metadata')) {
-        result += ` ${metadataTag}`;
-      }
-
-      logVerbose(`Description transformed: "${source}" → "${result}"`);
-      return result;
-    } catch (error) {
-      getLogger().error('Description transformation failed', error as Error);
-      return originalDesc;
+      return this.applyTransforms(source, transforms);
     }
+    const source = (!originalDesc || originalDesc.trim() === '') ? originalTitle : originalDesc;
+    let result = this.applyTransforms(source, transforms);
+    const metadataTag = `\n\n[metadata ${this.config.metadataVersion}: ${this.generateProcessingId()}]`;
+    if (!result.includes('[metadata')) {
+      result += metadataTag;
+    }
+    logVerbose(`Description transformed: "${source}" → "${result}"`);
+    return result;
   }
 
   /**
@@ -332,22 +309,46 @@ class VideoProcessor {
     const warnings: string[] = [];
     const errors: string[] = [];
 
-    // Check title transformation pattern
-    try {
-      new RegExp(this.config.titleTransform.pattern);
-    } catch (error) {
-      errors.push(`Invalid title transformation pattern: ${this.config.titleTransform.pattern}`);
+    // Check title transformation pattern(s)
+    if (Array.isArray(this.config.titleTransforms) && this.config.titleTransforms.length > 0) {
+      for (const t of this.config.titleTransforms) {
+        try {
+          new RegExp(t.pattern);
+        } catch (error) {
+          errors.push(`Invalid title transformation pattern: ${t.pattern}`);
+        }
+      }
+    } else if (this.config.titleTransform) {
+      try {
+        new RegExp(this.config.titleTransform.pattern);
+      } catch (error) {
+        errors.push(`Invalid title transformation pattern: ${this.config.titleTransform.pattern}`);
+      }
+    } else {
+      errors.push('No title transformation pattern(s) configured');
     }
 
-    // Check description transformation pattern
-    try {
-      new RegExp(this.config.descriptionTransform.pattern);
-    } catch (error) {
-      errors.push(`Invalid description transformation pattern: ${this.config.descriptionTransform.pattern}`);
+    // Check description transformation pattern(s)
+    if (Array.isArray(this.config.descriptionTransforms) && this.config.descriptionTransforms.length > 0) {
+      for (const t of this.config.descriptionTransforms) {
+        try {
+          new RegExp(t.pattern);
+        } catch (error) {
+          errors.push(`Invalid description transformation pattern: ${t.pattern}`);
+        }
+      }
+    } else if (this.config.descriptionTransform) {
+      try {
+        new RegExp(this.config.descriptionTransform.pattern);
+      } catch (error) {
+        errors.push(`Invalid description transformation pattern: ${this.config.descriptionTransform.pattern}`);
+      }
+    } else {
+      errors.push('No description transformation pattern(s) configured');
     }
 
     // Check base tags
-    if (this.config.baseTags.length === 0) {
+    if (!this.config.baseTags || this.config.baseTags.length === 0) {
       warnings.push('No base tags configured');
     }
 
@@ -438,6 +439,24 @@ class VideoProcessor {
   }
 
   /**
+   * Extract recording date from title using a regex pattern from config
+   */
+  private extractRecordingDateFromTitle(title: string): string | undefined {
+    const pattern = this.config.recordingDateExtractPattern
+      ? new RegExp(this.config.recordingDateExtractPattern)
+      : /(?<year>\d{4})[ .-]?(?<month>\d{2})[ .-]?(?<day>\d{2})[ .-]+(?<hour>\d{2})[ .-]?(?<minute>\d{2})[ .-]?(?<second>\d{2})[ .-]?(?<centisecond>\d{2})/;
+    const match = title.match(pattern);
+    if (match && match.groups) {
+      const { year, month, day, hour, minute, second, centisecond } = match.groups;
+      if (year && month && day && hour && minute) {
+        // Build ISO string (centisecond optional)
+        return `${year}-${month}-${day}T${hour}:${minute}:${second || '00'}.${centisecond || '000'}Z`;
+      }
+    }
+    return undefined;
+  }
+
+  /**
    * Generate comprehensive dry-run preview
    */
   private async generateDryRunPreview(videos: LocalVideo[]): Promise<DryRunPreview> {
@@ -466,8 +485,14 @@ class VideoProcessor {
 
     // Generate preview for each video
     const preview = videos.map(video => {
-      const newTitle = this.transformTitle(video.title, video.recordingDate);
-      const newDescription = this.transformDescription(video.description, video.title, video.recordingDate);
+      let recordingDate = video.recordingDate;
+      let extractedRecordingDate: string | undefined = undefined;
+      if (!recordingDate) {
+        extractedRecordingDate = this.extractRecordingDateFromTitle(video.title);
+        recordingDate = extractedRecordingDate;
+      }
+      const newTitle = this.transformTitle(video.title, recordingDate);
+      const newDescription = this.transformDescription(video.description, video.title, recordingDate);
       const newTags = this.generateTags(video.title);
       const processingId = this.generateProcessingId();
       const newMetadataVersion = `[metadata ${this.config.metadataVersion}: ${processingId}]`;
@@ -493,15 +518,15 @@ class VideoProcessor {
       if (video.recordingDate) {
         currentState.recordingDate = video.recordingDate;
       }
-
       const proposedState: any = {
         title: newTitle,
         description: newDescription,
         tags: newTags,
         metadataVersion: newMetadataVersion
       };
-      if (video.recordingDate) {
-        proposedState.recordingDate = video.recordingDate;
+      // Always set recordingDate in proposedState if extracted
+      if (recordingDate) {
+        proposedState.recordingDate = recordingDate;
       }
 
       return {
@@ -512,7 +537,7 @@ class VideoProcessor {
           titleChanged: newTitle !== video.title,
           descriptionChanged: newDescription !== video.description,
           tagsChanged: JSON.stringify(newTags) !== JSON.stringify(video.tags || []),
-          recordingDateChanged: false, // We don't change recording dates
+          recordingDateChanged: (recordingDate && recordingDate !== video.recordingDate) || false,
           metadataVersionAdded: !video.description?.includes('[metadata')
         },
         validation: {
@@ -584,9 +609,14 @@ class VideoProcessor {
         return true;
       }
 
+      let recordingDate = video.recordingDate;
+      if (!recordingDate) {
+        recordingDate = this.extractRecordingDateFromTitle(video.title);
+      }
+
       // Transform video metadata
-      const newTitle = this.transformTitle(video.title, video.recordingDate);
-      const newDescription = this.transformDescription(video.description, video.title, video.recordingDate);
+      const newTitle = this.transformTitle(video.title, recordingDate);
+      const newDescription = this.transformDescription(video.description, video.title, recordingDate);
       const newTags = this.generateTags(video.title);
 
       // Prepare video settings
@@ -603,8 +633,8 @@ class VideoProcessor {
       };
 
       // Only add recordingDate if it's defined
-      if (video.recordingDate) {
-        videoSettings.recordingDate = video.recordingDate;
+      if (recordingDate) {
+        videoSettings.recordingDate = recordingDate;
       }
       
       if (options.dryRun) {
@@ -787,10 +817,11 @@ async function main(): Promise<void> {
 
     // Initialize logger
     initializeLogger({
-      verbose: config.app.verbose,
-      logLevel: config.app.logLevel as any,
+      verbose: options.verbose ? true : config.app.verbose,
+      logLevel: options.verbose ? 'verbose' : (config.app.logLevel as any),
       logsDir: config.paths.logsDir
     });
+    logVerbose('TEST VERBOSE LOG');
     
     // Initialize YouTube client
     const youtubeClient = new YouTubeClient(
@@ -911,7 +942,9 @@ async function main(): Promise<void> {
       }
       
       // Save results to file
-      const resultsFile = `processing-results-${new Date().toISOString().split('T')[0]}.json`;
+      const logsDir = path.join('logs');
+      await fs.ensureDir(logsDir);
+      const resultsFile = path.join(logsDir, `processing-results-${new Date().toISOString().split('T')[0]}.json`);
       await fs.writeJson(resultsFile, result, { spaces: 2 });
       getLogger().info(`Results saved to ${resultsFile}`);
     }

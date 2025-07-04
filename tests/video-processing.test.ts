@@ -136,6 +136,99 @@ describe('Video Processing with Named Groups', () => {
       const metadataMatches = result.match(/\[metadata/g);
       expect(metadataMatches).toHaveLength(1);
     });
+
+    it('should generate description from title if description is empty', () => {
+      const originalTitle = "Tom Clancy's The Division 2 2025 03 29 21 23 03 09 Countdown Last Phase Heroic";
+      const originalDesc = "";
+      const recordingDate = '2025-01-25T21:23:03.090Z';
+      // Use the config from the main config/video-processing.json for this test
+      const config = {
+        titleTransform: {
+          pattern: "Tom Clancy's The Division 2 (\\d{4}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (.+)",
+          replacement: "$8 / The Division 2 / $1-$2-$3"
+        },
+        descriptionTransform: {
+          pattern: "Tom Clancy's The Division 2 (\\d{4}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2})",
+          replacement: "Tom Clancy's The Division 2 / $1-$2-$3 $4:$5"
+        },
+        baseTags: ['The Division 2', 'Gaming', 'Gameplay', 'Tom Clancy'],
+        maxDynamicTags: 2,
+        metadataVersion: 'v1.1',
+        videoSettings: {
+          madeForKids: false,
+          license: 'creativeCommon',
+          categoryId: '20',
+          allowRemixing: true
+        }
+      };
+      const processor = new VideoProcessor(mockYouTubeClient as any, config as any);
+      const result = processor['transformDescription'](originalDesc, originalTitle, recordingDate);
+      expect(result).toContain("Tom Clancy's The Division 2 / 2025-01-25 21:23");
+      expect(result).toMatch(/\[metadata v1\.1: proc_\d{8}_\d{6}\]/);
+    });
+  });
+
+  describe('Multi-step Title and Description Transforms', () => {
+    const config = {
+      titleTransforms: [
+        { pattern: "^Tom Clancy's\\s+The\\s+Division\\s+2\\s+(.+)\\s+(\\d{4}-\\d{2}-\\d{2})$", replacement: "$1 / The Division 2 / $2" },
+        { pattern: "^Tom Clancy's\\s+The\\s+Division\\s+2\\s*-?\\s*", replacement: "" },
+        { pattern: "^(\\d{4}) (\\d{2}) (\\d{2})\\s+(\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (.+)", replacement: "$8 / The Division 2 / $1-$2-$3" }
+      ],
+      descriptionTransforms: [
+        { pattern: "^(\\d{4})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})$", replacement: "Tom Clancy's The Division 2 / $1-$2-$3 $4:$5" },
+        { pattern: "^(\\d{4}) (\\d{2}) (\\d{2})\\s+(\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (.+)", replacement: "Tom Clancy's The Division 2 / $1-$2-$3 $4:$5" }
+      ],
+      baseTags: ['The Division 2', 'Gaming', 'Gameplay', 'Tom Clancy'],
+      maxDynamicTags: 2,
+      metadataVersion: 'v1.1',
+      videoSettings: {
+        madeForKids: false,
+        license: 'creativeCommon',
+        categoryId: '20',
+        allowRemixing: true
+      },
+      recordingDateExtractPattern: "(?<year>\\d{4})[ .-]?(?<month>\\d{2})[ .-]?(?<day>\\d{2})[ .-]+(?<hour>\\d{2})[ .-]?(?<minute>\\d{2})[ .-]?(?<second>\\d{2})[ .-]?(?<centisecond>\\d{2})"
+    };
+    const processor = new VideoProcessor(mockYouTubeClient as any, config as any);
+
+    it('should transform title with prefix and spaces', () => {
+      const originalTitle = "Tom Clancy's The Division 2 2025 03 09   07 33 12 03 Various activities with random group";
+      const expected = "Various activities with random group / The Division 2 / 2025-03-09";
+      const result = processor['transformTitle'](originalTitle, '2025-03-09T07:33:12.030Z');
+      expect(result).toBe(expected);
+    });
+
+    it('should transform title already in date+rest format', () => {
+      const originalTitle = "2025 03 09   07 33 12 03 Various activities with random group";
+      const expected = "Various activities with random group / The Division 2 / 2025-03-09";
+      const result = processor['transformTitle'](originalTitle, '2025-03-09T07:33:12.030Z');
+      expect(result).toBe(expected);
+    });
+
+    it('should transform title with dash before date', () => {
+      const originalTitle = "Tom Clancy's The Division 2 - 2025 03 09   07 33 12 03 Sometext";
+      const expected = "Sometext / The Division 2 / 2025-03-09";
+      const result = processor['transformTitle'](originalTitle, '2025-03-09T07:33:12.030Z');
+      expect(result).toBe(expected);
+    });
+
+    it('should transform description with prefix and spaces', () => {
+      const originalTitle = "Tom Clancy's The Division 2 2025 03 09   07 33 12 03 Various activities with random group";
+      const originalDesc = "";
+      const result = processor['transformDescription'](originalDesc, originalTitle, '2025-03-09T07:33:12.030Z');
+      expect(result).toContain("Tom Clancy's The Division 2 / 2025-03-09 07:33");
+      expect(result).toMatch(/\[metadata v1\.1: proc_\d{8}_\d{6}\]/);
+    });
+
+    it('should transform description for Division 2 video with spaced date/time', () => {
+      const originalTitle = "Tom Clancy's The Division 2 2025 03 09   07 33 12 03 Various activities with random group";
+      const originalDesc = "";
+      const recordingDate = '2025-03-09T07:33:12.030Z';
+      const result = processor['transformDescription'](originalDesc, originalTitle, recordingDate);
+      expect(result).toContain("Tom Clancy's The Division 2 / 2025-03-09 07:33");
+      expect(result).toMatch(/\[metadata v1\..*\]/);
+    });
   });
 
   describe('Tag Generation', () => {

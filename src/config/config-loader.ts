@@ -53,11 +53,19 @@ const VideoProcessingConfigSchema = z.object({
   titleTransform: z.object({
     pattern: z.string().min(1, 'Title transform pattern is required'),
     replacement: z.string()
-  }),
+  }).optional(),
   descriptionTransform: z.object({
     pattern: z.string().min(1, 'Description transform pattern is required'),
     replacement: z.string()
-  }),
+  }).optional(),
+  titleTransforms: z.array(z.object({
+    pattern: z.string().min(1, 'Title transform pattern is required'),
+    replacement: z.string()
+  })).optional(),
+  descriptionTransforms: z.array(z.object({
+    pattern: z.string().min(1, 'Description transform pattern is required'),
+    replacement: z.string()
+  })).optional(),
   baseTags: z.array(z.string()),
   maxDynamicTags: z.number().min(1).max(10).default(2),
   metadataVersion: z.string().min(1, 'Metadata version is required'),
@@ -66,7 +74,8 @@ const VideoProcessingConfigSchema = z.object({
     license: z.string().default('creativeCommon'),
     categoryId: z.string().default('20'), // Gaming category
     allowRemixing: z.boolean().default(true)
-  })
+  }),
+  recordingDateExtractPattern: z.string().optional()
 });
 
 // Configuration types
@@ -293,19 +302,35 @@ export class ConfigLoader {
         
         // Fail-fast validation: Check all required fields are present
         const errors: string[] = [];
-        
-        if (!configData.titleTransform?.pattern || typeof configData.titleTransform.pattern !== 'string') {
-          errors.push('titleTransform.pattern (required string)');
+
+        // Accept either single or multi-step transforms for title
+        const hasTitleTransform = (
+          configData.titleTransform?.pattern && typeof configData.titleTransform.pattern === 'string' &&
+          configData.titleTransform?.replacement && typeof configData.titleTransform.replacement === 'string'
+        );
+        const hasTitleTransforms = (
+          Array.isArray(configData.titleTransforms) && configData.titleTransforms.length > 0 &&
+          typeof configData.titleTransforms[0].pattern === 'string' &&
+          typeof configData.titleTransforms[0].replacement === 'string'
+        );
+        if (!hasTitleTransform && !hasTitleTransforms) {
+          errors.push('titleTransform.pattern (required string) or titleTransforms (required array)');
         }
-        if (!configData.titleTransform?.replacement || typeof configData.titleTransform.replacement !== 'string') {
-          errors.push('titleTransform.replacement (required string)');
+
+        // Accept either single or multi-step transforms for description
+        const hasDescriptionTransform = (
+          configData.descriptionTransform?.pattern && typeof configData.descriptionTransform.pattern === 'string' &&
+          configData.descriptionTransform?.replacement && typeof configData.descriptionTransform.replacement === 'string'
+        );
+        const hasDescriptionTransforms = (
+          Array.isArray(configData.descriptionTransforms) && configData.descriptionTransforms.length > 0 &&
+          typeof configData.descriptionTransforms[0].pattern === 'string' &&
+          typeof configData.descriptionTransforms[0].replacement === 'string'
+        );
+        if (!hasDescriptionTransform && !hasDescriptionTransforms) {
+          errors.push('descriptionTransform.pattern (required string) or descriptionTransforms (required array)');
         }
-        if (!configData.descriptionTransform?.pattern || typeof configData.descriptionTransform.pattern !== 'string') {
-          errors.push('descriptionTransform.pattern (required string)');
-        }
-        if (!configData.descriptionTransform?.replacement || typeof configData.descriptionTransform.replacement !== 'string') {
-          errors.push('descriptionTransform.replacement (required string)');
-        }
+
         if (!Array.isArray(configData.baseTags)) {
           errors.push('baseTags (required array)');
         }
@@ -315,7 +340,7 @@ export class ConfigLoader {
         if (!configData.metadataVersion || typeof configData.metadataVersion !== 'string') {
           errors.push('metadataVersion (required string)');
         }
-        
+
         if (errors.length > 0) {
           throw new Error(`Video processing configuration is missing required fields: ${errors.join(', ')}`);
         }
@@ -361,7 +386,8 @@ export class ConfigLoader {
         license: 'creativeCommon',
         categoryId: '20', // Gaming category
         allowRemixing: true
-      }
+      },
+      recordingDateExtractPattern: '(?<year>\\d{4})[ .-]?(?<month>\\d{2})[ .-]?(?<day>\\d{2})[ .-]+(?<hour>\\d{2})[ .-]?(?<minute>\\d{2})[ .-]?(?<second>\\d{2})[ .-]?(?<centisecond>\\d{2})'
     };
   }
 
