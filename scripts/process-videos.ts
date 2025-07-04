@@ -241,11 +241,6 @@ class VideoProcessor {
       ? this.config.descriptionTransforms
       : this.config.descriptionTransform ? [this.config.descriptionTransform] : [];
     if (!Array.isArray(transforms)) return originalDesc;
-    if (!recordingDate) {
-      getLogger().warning('No recording date available for description transformation');
-      const source = (!originalDesc || originalDesc.trim() === '') ? originalTitle : originalDesc;
-      return this.applyTransforms(source, transforms);
-    }
     const source = (!originalDesc || originalDesc.trim() === '') ? originalTitle : originalDesc;
     let result = this.applyTransforms(source, transforms);
     const metadataTag = `\n\n[metadata ${this.config.metadataVersion}: ${this.generateProcessingId()}]`;
