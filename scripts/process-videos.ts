@@ -232,7 +232,7 @@ class VideoProcessor {
   /**
    * Transform video description according to configuration
    */
-  private transformDescription(originalDesc: string, recordingDate?: string): string {
+  private transformDescription(originalDesc: string, originalTitle: string, recordingDate?: string): string {
     if (!recordingDate) {
       getLogger().warning('No recording date available for description transformation');
       return originalDesc;
@@ -241,7 +241,10 @@ class VideoProcessor {
     try {
       const pattern = new RegExp(this.config.descriptionTransform.pattern);
       const replacement = this.config.descriptionTransform.replacement;
-      
+
+      // Use title as source if description is empty
+      const source = (!originalDesc || originalDesc.trim() === '') ? originalTitle : originalDesc;
+
       // Replace date placeholders in replacement string
       const dateObj = new Date(recordingDate);
       const year = dateObj.getFullYear();
@@ -249,7 +252,7 @@ class VideoProcessor {
       const day = dateObj.getDate().toString().padStart(2, '0');
       const hour = dateObj.getHours().toString().padStart(2, '0');
       const minute = dateObj.getMinutes().toString().padStart(2, '0');
-      
+
       let result = replacement
         .replace(/\$1/g, year.toString())
         .replace(/\$2/g, month)
@@ -258,18 +261,17 @@ class VideoProcessor {
         .replace(/\$5/g, minute);
 
       // Apply the regex replacement
-      result = originalDesc.replace(pattern, result);
-      
+      result = source.replace(pattern, result);
+
       // Add metadata version tag
       const processingId = this.generateProcessingId();
       const metadataTag = `[metadata ${this.config.metadataVersion}: ${processingId}]`;
-      
-      // Check if metadata tag already exists
+
       if (!result.includes('[metadata')) {
         result += ` ${metadataTag}`;
       }
-      
-      logVerbose(`Description transformed: "${originalDesc}" → "${result}"`);
+
+      logVerbose(`Description transformed: "${source}" → "${result}"`);
       return result;
     } catch (error) {
       getLogger().error('Description transformation failed', error as Error);
@@ -465,7 +467,7 @@ class VideoProcessor {
     // Generate preview for each video
     const preview = videos.map(video => {
       const newTitle = this.transformTitle(video.title, video.recordingDate);
-      const newDescription = this.transformDescription(video.description, video.recordingDate);
+      const newDescription = this.transformDescription(video.description, video.title, video.recordingDate);
       const newTags = this.generateTags(video.title);
       const processingId = this.generateProcessingId();
       const newMetadataVersion = `[metadata ${this.config.metadataVersion}: ${processingId}]`;
@@ -584,7 +586,7 @@ class VideoProcessor {
 
       // Transform video metadata
       const newTitle = this.transformTitle(video.title, video.recordingDate);
-      const newDescription = this.transformDescription(video.description, video.recordingDate);
+      const newDescription = this.transformDescription(video.description, video.title, video.recordingDate);
       const newTags = this.generateTags(video.title);
 
       // Prepare video settings
