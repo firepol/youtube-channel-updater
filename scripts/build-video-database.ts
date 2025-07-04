@@ -481,6 +481,7 @@ Options:
   --channel-id <ID>    Channel ID to fetch videos from (default: from .env)
   --output <FILE>      Output file path (default: data/videos.json)
   --use-oauth          Use OAuth 2.0 for complete access (public, unlisted, private)
+  --force              Delete existing database before building (force full fetch)
   --help               Show this help message
 
 Examples:
@@ -490,11 +491,17 @@ Examples:
   # Build database for your own channel with OAuth (all videos)
   tsx scripts/build-video-database.ts --use-oauth
 
+  # Force full fetch (delete existing database first)
+  tsx scripts/build-video-database.ts --use-oauth --force
+
   # Fetch public videos from any channel
   tsx scripts/build-video-database.ts --channel-id UCN8FkVLFVQCwMsFloU-KaAA --output other-channel.json
 
   # Fetch all videos from any channel (requires OAuth + channel access)
   tsx scripts/build-video-database.ts --channel-id UCN8FkVLFVQCwMsFloU-KaAA --output other-channel.json --use-oauth
+
+  # Force full fetch for another channel
+  tsx scripts/build-video-database.ts --channel-id UCN8FkVLFVQCwMsFloU-KaAA --output other-channel.json --use-oauth --force
 
 Authentication:
   - API Key: Fetches public videos only (works for any channel)
@@ -509,6 +516,7 @@ Authentication:
 async function main() {
   // Parse command line arguments first
   const args: CommandLineArgs = {};
+  let forceFullFetch = false;
   const argv = process.argv.slice(2);
   
   for (let i = 0; i < argv.length; i++) {
@@ -521,6 +529,9 @@ async function main() {
         break;
       case '--use-oauth':
         args.useOAuth = true;
+        break;
+      case '--force':
+        forceFullFetch = true;
         break;
       case '--help':
         VideoDatabaseBuilder.showHelp();
@@ -537,6 +548,10 @@ async function main() {
   
   try {
     await builder.initialize();
+
+    if (forceFullFetch && (!args.command || args.command === 'build')) {
+      await builder.clean();
+    }
 
     const command = args.command || 'build';
 
