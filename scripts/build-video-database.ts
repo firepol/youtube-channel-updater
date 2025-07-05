@@ -407,6 +407,17 @@ class VideoDatabaseBuilder {
 
           // Move to next page
           pageToken = response.nextPageToken;
+          
+          // Log pagination info for debugging
+          if (!response.nextPageToken) {
+            const expectedTotal = response.pageInfo?.totalResults || 0;
+            const actualFetched = totalProcessed;
+            if (expectedTotal > actualFetched) {
+              this.logger.info(`Pagination complete: fetched ${actualFetched} videos, API reports ${expectedTotal} total (${expectedTotal - actualFetched} videos may be deleted or in processing state)`);
+            } else {
+              this.logger.info(`Pagination complete: fetched ${actualFetched} videos`);
+            }
+          }
 
         } catch (error) {
           this.logger.error(`Failed to fetch page ${pageCount}`, error as Error);
