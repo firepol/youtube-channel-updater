@@ -469,13 +469,18 @@ class VideoProcessor {
   private extractRecordingDateFromTitle(title: string): string | undefined {
     const pattern = this.config.recordingDateExtractPattern
       ? new RegExp(this.config.recordingDateExtractPattern)
-      : /(?<year>\d{4})[ .-]?(?<month>\d{2})[ .-]?(?<day>\d{2})[ .-]+(?<hour>\d{2})[ .-]?(?<minute>\d{2})[ .-]?(?<second>\d{2})[ .-]?(?<centisecond>\d{2})/;
+      : /(?<year>\d{4})[ .-]?(?<month>\d{2})[ .-]?(?<day>\d{2})(?:[ .-]+(?<hour>\d{2})[ .-]?(?<minute>\d{2})[ .-]?(?<second>\d{2})[ .-]?(?<centisecond>\d{2}))?/;
     const match = title.match(pattern);
     if (match && match.groups) {
       const { year, month, day, hour, minute, second, centisecond } = match.groups;
-      if (year && month && day && hour && minute) {
-        // Build ISO string (centisecond optional)
-        return `${year}-${month}-${day}T${hour}:${minute}:${second || '00'}.${centisecond || '000'}Z`;
+      if (year && month && day) {
+        if (hour && minute) {
+          // Full timestamp with time
+          return `${year}-${month}-${day}T${hour}:${minute}:${second || '00'}.${centisecond || '000'}Z`;
+        } else {
+          // Date only - set to midnight
+          return `${year}-${month}-${day}T00:00:00.000Z`;
+        }
       }
     }
     return undefined;
@@ -670,6 +675,11 @@ class VideoProcessor {
       let recordingDate = video.recordingDate;
       if (!recordingDate) {
         recordingDate = this.extractRecordingDateFromTitle(video.title);
+        if (recordingDate) {
+          logVerbose(`Extracted recording date from title "${video.title}": ${recordingDate}`);
+        } else {
+          logVerbose(`No recording date found in title: "${video.title}"`);
+        }
       }
 
       // Transform video metadata
@@ -693,6 +703,9 @@ class VideoProcessor {
       // Only add recordingDate if it's defined
       if (recordingDate) {
         videoSettings.recordingDate = recordingDate;
+        logVerbose(`Setting recording date for video ${video.id}: ${recordingDate}`);
+      } else {
+        logVerbose(`No recording date available for video ${video.id}`);
       }
       
       if (options.dryRun) {
