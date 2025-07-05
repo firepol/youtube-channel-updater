@@ -410,6 +410,38 @@ export class YouTubeClient {
   }
 
   /**
+   * Get current video status from YouTube API
+   */
+  async getVideoStatus(videoId: string): Promise<{
+    madeForKids: boolean | null;
+    license: string | null;
+    categoryId: string | null;
+  }> {
+    return this.executeApiCall(
+      async () => {
+        const response = await this.youtube.videos.list({
+          auth: this.oauth2Client,
+          part: ['status', 'snippet'],
+          id: [videoId]
+        });
+
+        const video = response.data.items?.[0];
+        if (!video) {
+          throw new Error(`Video ${videoId} not found`);
+        }
+
+        return {
+          madeForKids: video.status?.madeForKids ?? null,
+          license: video.status?.license ?? null,
+          categoryId: video.snippet?.categoryId ?? null
+        };
+      },
+      1, // API cost
+      'getVideoStatus'
+    );
+  }
+
+  /**
    * Update video metadata
    */
   async updateVideo(

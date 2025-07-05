@@ -321,12 +321,6 @@ class VideoProcessor {
         }
       }
       
-      // Check if madeForKids needs to be explicitly set to false
-      if (video.madeForKids === undefined || video.madeForKids === null) {
-        logVerbose(`Video ${video.id} needs processing: madeForKids not explicitly set to false`);
-        return true;
-      }
-      
       // Check if other settings need updating
       if (video.license !== 'creativeCommon' || video.categoryId !== '20') {
         logVerbose(`Video ${video.id} needs processing: license or category needs updating`);
@@ -710,18 +704,34 @@ class VideoProcessor {
       const newDescription = this.transformDescription(video.description, video.title, recordingDate);
       const newTags = this.generateTags(video.title);
 
+      // Check current YouTube status to avoid unnecessary updates
+      let currentStatus: { madeForKids: boolean | null; license: string | null; categoryId: string | null } | null = null;
+      try {
+        currentStatus = await this.youtubeClient.getVideoStatus(video.id);
+        logVerbose(`Current YouTube status for ${video.id}: madeForKids=${currentStatus.madeForKids}, license=${currentStatus.license}, categoryId=${currentStatus.categoryId}`);
+      } catch (error) {
+        logVerbose(`Could not fetch current status for ${video.id}, will set all fields: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
       // Prepare video settings
       const videoSettings: any = {
         title: newTitle,
         description: newDescription,
         tags: newTags,
         categoryId: '20', // Gaming
-        madeForKids: false,
         license: 'creativeCommon',
         embeddable: true,
         publicStatsViewable: true,
         shortsRemixing: 'allow'
       };
+
+      // Only set madeForKids if it's not already false
+      if (currentStatus?.madeForKids !== false) {
+        videoSettings.madeForKids = false;
+        logVerbose(`Setting madeForKids to false for ${video.id} (current: ${currentStatus?.madeForKids})`);
+      } else {
+        logVerbose(`Skipping madeForKids update for ${video.id} (already false)`);
+      }
 
       // Only add recordingDate if it's defined
       if (recordingDate) {
@@ -752,7 +762,7 @@ class VideoProcessor {
         description: newDescription,
         tags: newTags,
         recordingDate: recordingDate,
-        madeForKids: false,
+        madeForKids: false, // Always false in our database
         license: 'creativeCommon',
         categoryId: '20',
         lastUpdated: new Date().toISOString()
