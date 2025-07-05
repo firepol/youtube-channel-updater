@@ -203,9 +203,6 @@ class VideoProcessor {
     for (const { pattern, replacement } of transforms) {
       const regex = new RegExp(pattern);
       const match = result.match(regex);
-      logVerbose(`[DEBUG] Applying pattern: ${pattern}`);
-      logVerbose(`[DEBUG] Source string: '${result}'`);
-      logVerbose(`[DEBUG] Match result: ${!!(Array.isArray(match) && match.length > 0)}`);
       if (Array.isArray(match) && match.length > 0) {
         let replaced = replacement;
         for (let i = 1; i < match.length; i++) {
@@ -230,7 +227,11 @@ class VideoProcessor {
       getLogger().warning('No recording date available for title transformation');
       return this.applyTransforms(originalTitle, transforms);
     }
-    return this.applyTransforms(originalTitle, transforms);
+    const result = this.applyTransforms(originalTitle, transforms);
+    if (result !== originalTitle) {
+      getLogger().info(`Title transformed: "${originalTitle}" → "${result}"`);
+    }
+    return result;
   }
 
   /**
@@ -247,7 +248,9 @@ class VideoProcessor {
     if (!result.includes('[metadata')) {
       result += metadataTag;
     }
-    logVerbose(`Description transformed: "${source}" → "${result}"`);
+    if (result !== source) {
+      getLogger().info(`Description transformed: "${source}" → "${result}"`);
+    }
     return result;
   }
 
@@ -816,7 +819,6 @@ async function main(): Promise<void> {
       logLevel: options.verbose ? 'verbose' : (config.app.logLevel as any),
       logsDir: config.paths.logsDir
     });
-    logVerbose('TEST VERBOSE LOG');
     
     // Initialize YouTube client
     const youtubeClient = new YouTubeClient(

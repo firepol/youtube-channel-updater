@@ -107,15 +107,10 @@ class Logger {
   }
 
   verbose(message: string): void {
-    // Force print verbose logs for debugging
+    if (!this.shouldLog(LogLevel.VERBOSE) || !this.config.verbose) return;
     const formattedMessage = this.formatMessage(LogLevel.VERBOSE, message);
-    console.log(formattedMessage);
+    console.log(this.chalk.gray(formattedMessage));
     this.writeToFile(LogLevel.VERBOSE, message);
-    // Original logic (commented out for now):
-    // if (!this.shouldLog(LogLevel.VERBOSE) || !this.config.verbose) return;
-    // const formattedMessage = this.formatMessage(LogLevel.VERBOSE, message);
-    // console.log(this.chalk.gray(formattedMessage));
-    // this.writeToFile(LogLevel.VERBOSE, message);
   }
 
   success(message: string): void {
