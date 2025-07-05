@@ -271,6 +271,8 @@ class VideoProcessor {
             for (const tag of rule.tags) {
               if (dynamicTags.length < this.config.maxDynamicTags) {
                 dynamicTags.push(tag);
+              } else {
+                break; // Stop adding tags if we've reached the limit
               }
             }
           }
@@ -291,14 +293,6 @@ class VideoProcessor {
         if (words.includes(keyword) && dynamicTags.length < this.config.maxDynamicTags) {
           dynamicTags.push(keyword.charAt(0).toUpperCase() + keyword.slice(1));
         }
-      }
-      
-      // Add game-specific keywords
-      if (title.toLowerCase().includes('division')) {
-        dynamicTags.push('The Division');
-      }
-      if (title.toLowerCase().includes('dark zone') || title.toLowerCase().includes('dz')) {
-        dynamicTags.push('Dark Zone');
       }
     }
     

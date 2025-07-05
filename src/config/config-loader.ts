@@ -66,6 +66,11 @@ const VideoProcessingConfigSchema = z.object({
     pattern: z.string().min(1, 'Description transform pattern is required'),
     replacement: z.string()
   })).optional(),
+  titleBasedTags: z.array(z.object({
+    pattern: z.string().min(1, 'Title-based tag pattern is required'),
+    tags: z.array(z.string()).min(1, 'At least one tag is required'),
+    caseSensitive: z.boolean().optional()
+  })).optional(),
   baseTags: z.array(z.string()),
   maxDynamicTags: z.number().min(1).max(10).default(2),
   metadataVersion: z.string().min(1, 'Metadata version is required'),
