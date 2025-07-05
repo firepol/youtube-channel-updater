@@ -527,8 +527,8 @@ export class VideoFilter {
 
     console.log('\nVideos to be processed:');
     
-    // Display first 10 results
-    const displayCount = Math.min(10, results.length);
+    // Display first 500 results
+    const displayCount = Math.min(500, results.length);
     for (let i = 0; i < displayCount; i++) {
       const result = results[i];
       const views = result.statistics?.viewCount || '0';
