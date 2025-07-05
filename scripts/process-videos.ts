@@ -40,7 +40,9 @@ interface ProcessingOptions {
   publishedAfter?: string; // Direct date filter
   publishedBefore?: string; // Direct date filter
   titleContains?: string; // Direct title filter
+  titleNotContains?: string; // Direct title not contains filter
   descriptionContains?: string; // Direct description filter
+  descriptionNotContains?: string; // Direct description not contains filter
   minViews?: number; // Direct views filter
   maxViews?: number; // Direct views filter
 }
@@ -932,7 +934,9 @@ async function main(): Promise<void> {
     .option('--published-after <date>', 'Direct date filter')
     .option('--published-before <date>', 'Direct date filter')
     .option('--title-contains <text>', 'Direct title filter')
+    .option('--title-not-contains <text>', 'Direct title not contains filter')
     .option('--description-contains <text>', 'Direct description filter')
+    .option('--description-not-contains <text>', 'Direct description not contains filter')
     .option('--min-views <number>', 'Direct views filter')
     .option('--max-views <number>', 'Direct views filter')
     .parse();
@@ -997,7 +1001,8 @@ async function main(): Promise<void> {
       }
       videos = await fs.readJson(options.input) as LocalVideo[];
     } else if (options.filterConfig || options.privacyStatus || options.publishedAfter || 
-               options.publishedBefore || options.titleContains || options.descriptionContains || 
+               options.publishedBefore || options.titleContains || options.titleNotContains || 
+               options.descriptionContains || options.descriptionNotContains || 
                options.minViews !== undefined || options.maxViews !== undefined) {
       // Filter videos directly from channel database
       getLogger().info('Filtering videos directly from channel database...');
@@ -1030,7 +1035,9 @@ async function main(): Promise<void> {
         addFilter('published_after', options.publishedAfter);
         addFilter('published_before', options.publishedBefore);
         addFilter('title_contains', options.titleContains);
+        addFilter('title_not_contains', options.titleNotContains);
         addFilter('description_contains', options.descriptionContains);
+        addFilter('description_not_contains', options.descriptionNotContains);
         addFilter('min_views', options.minViews);
         addFilter('max_views', options.maxViews);
         
