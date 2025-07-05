@@ -310,6 +310,29 @@ class VideoProcessor {
   private needsProcessing(video: LocalVideo): boolean {
     // Check if video already has current metadata version
     if (video.description && video.description.includes(`[metadata ${this.config.metadataVersion}:`)) {
+      // Even if metadata version matches, check for other criteria that need updating
+      
+      // Check if recording date is missing but can be extracted from title
+      if (!video.recordingDate) {
+        const extractedDate = this.extractRecordingDateFromTitle(video.title);
+        if (extractedDate) {
+          logVerbose(`Video ${video.id} needs processing: missing recording date (can extract: ${extractedDate})`);
+          return true;
+        }
+      }
+      
+      // Check if madeForKids needs to be explicitly set to false
+      if (video.madeForKids === undefined || video.madeForKids === null) {
+        logVerbose(`Video ${video.id} needs processing: madeForKids not explicitly set to false`);
+        return true;
+      }
+      
+      // Check if other settings need updating
+      if (video.license !== 'creativeCommon' || video.categoryId !== '20') {
+        logVerbose(`Video ${video.id} needs processing: license or category needs updating`);
+        return true;
+      }
+      
       return false;
     }
     
@@ -708,6 +731,9 @@ class VideoProcessor {
         logVerbose(`No recording date available for video ${video.id}`);
       }
       
+      // Log all settings being applied
+      logVerbose(`Video settings for ${video.id}: title="${videoSettings.title}", categoryId=${videoSettings.categoryId}, madeForKids=${videoSettings.madeForKids}, license=${videoSettings.license}, recordingDate=${videoSettings.recordingDate || 'none'}`);
+      
       if (options.dryRun) {
         getLogger().info(`[DRY RUN] Would update video ${video.id}:`);
         getLogger().info(`  Title: "${video.title}" → "${newTitle}"`);
@@ -726,6 +752,9 @@ class VideoProcessor {
         description: newDescription,
         tags: newTags,
         recordingDate: recordingDate,
+        madeForKids: false,
+        license: 'creativeCommon',
+        categoryId: '20',
         lastUpdated: new Date().toISOString()
       };
       
