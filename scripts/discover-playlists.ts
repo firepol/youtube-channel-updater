@@ -125,19 +125,69 @@ class PlaylistDiscoverer {
   }
 
   /**
-   * Generate playlist configuration template
+   * Load existing playlist configuration
    */
-  private generatePlaylistConfig(playlists: YouTubePlaylist[]): PlaylistConfig {
-    const playlistRules: PlaylistRule[] = playlists.map(playlist => ({
-      id: playlist.id,
-      title: playlist.title || 'Untitled Playlist',
-      description: playlist.description || '',
-      keywords: [], // Empty keywords array for manual configuration
-      visibility: (playlist.privacyStatus as 'public' | 'private' | 'unlisted') || 'private'
-    }));
-
-    return { playlists: playlistRules };
+  private async loadExistingPlaylistConfig(): Promise<PlaylistConfig> {
+    const configPath = path.join(this.configDir, 'playlists.json');
+    
+    try {
+      if (await fs.pathExists(configPath)) {
+        const existingConfig = await fs.readJson(configPath);
+        this.logger.verbose('Loaded existing playlist configuration');
+        return existingConfig;
+      }
+    } catch (error) {
+      this.logger.warning('Failed to load existing playlist configuration, starting fresh');
+    }
+    
+    return { playlists: [] };
   }
+
+  /**
+   * Merge discovered playlists with existing configuration
+   */
+  private mergePlaylistConfigs(
+    existingConfig: PlaylistConfig, 
+    discoveredPlaylists: YouTubePlaylist[]
+  ): PlaylistConfig {
+    const existingPlaylists = new Map(
+      existingConfig.playlists.map(p => [p.id, p])
+    );
+    
+    const mergedPlaylists: PlaylistRule[] = [];
+    
+    for (const discoveredPlaylist of discoveredPlaylists) {
+      const existingPlaylist = existingPlaylists.get(discoveredPlaylist.id);
+      
+      if (existingPlaylist) {
+        // Update existing playlist - preserve user fields, update API fields
+        mergedPlaylists.push({
+          id: discoveredPlaylist.id,
+          title: discoveredPlaylist.title || existingPlaylist.title,
+          description: discoveredPlaylist.description || existingPlaylist.description,
+          keywords: existingPlaylist.keywords, // Preserve user-configured keywords
+          visibility: existingPlaylist.visibility // Preserve user-configured visibility
+        });
+        
+        this.logger.verbose(`Updated existing playlist: ${discoveredPlaylist.title}`);
+      } else {
+        // Add new playlist with defaults
+        mergedPlaylists.push({
+          id: discoveredPlaylist.id,
+          title: discoveredPlaylist.title || 'Untitled Playlist',
+          description: discoveredPlaylist.description || '',
+          keywords: [], // Empty keywords for new playlists
+          visibility: (discoveredPlaylist.privacyStatus as 'public' | 'private' | 'unlisted') || 'private'
+        });
+        
+        this.logger.info(`Added new playlist: ${discoveredPlaylist.title}`);
+      }
+    }
+    
+    return { playlists: mergedPlaylists };
+  }
+
+
 
   /**
    * Discover all playlists
@@ -145,6 +195,10 @@ class PlaylistDiscoverer {
   async discoverPlaylists(): Promise<void> {
     try {
       this.logger.info('Starting playlist discovery...');
+
+      // Load existing configuration first
+      const existingConfig = await this.loadExistingPlaylistConfig();
+      this.logger.info(`Found ${existingConfig.playlists.length} existing playlist configurations`);
 
       // Log authentication status
       const isAuthenticated = this.youtubeClient.isAuthenticated();
@@ -212,15 +266,17 @@ class PlaylistDiscoverer {
 
       } while (pageToken);
 
-      // Generate playlist configuration template
-      const playlistConfig = this.generatePlaylistConfig(allPlaylists);
+      // Merge discovered playlists with existing configuration
+      const mergedConfig = this.mergePlaylistConfigs(existingConfig, allPlaylists);
       const configPath = path.join(this.configDir, 'playlists.json');
       
       try {
-        await fs.writeJson(configPath, playlistConfig, { spaces: 2 });
-        this.logger.success(`Generated playlist configuration template: ${configPath}`);
+        await fs.writeJson(configPath, mergedConfig, { spaces: 2 });
+        this.logger.success(`Updated playlist configuration: ${configPath}`);
+        this.logger.info(`Preserved ${existingConfig.playlists.length} existing configurations`);
+        this.logger.info(`Added ${mergedConfig.playlists.length - existingConfig.playlists.length} new playlists`);
       } catch (error) {
-        this.logger.error('Failed to write playlist configuration template', error as Error);
+        this.logger.error('Failed to write playlist configuration', error as Error);
       }
 
       this.logger.success(`Playlist discovery completed! Found ${allPlaylists.length} playlists`);
