@@ -223,7 +223,6 @@ class VideoDatabaseBuilder {
       privacyStatus: video.status?.privacyStatus || 'private',
       madeForKids: video.status?.madeForKids || false,
       license: video.status?.license || 'youtube',
-      recordingDate: video.recordingDate,
       // Additional fields for filtering
       uploadStatus: video.status?.uploadStatus,
       processingStatus: video.processingDetails?.processingStatus,
@@ -235,6 +234,7 @@ class VideoDatabaseBuilder {
       defaultAudioLanguage: video.snippet?.defaultAudioLanguage,
       statistics: video.statistics,
       processingErrors: video.suggestions?.processingErrors,
+      recordingDate: video.recordingDate || undefined,
       // Metadata tracking
       lastFetched: new Date().toISOString(),
       lastUpdated: video.snippet?.publishedAt || '' // Use publishedAt as it reflects when the video was uploaded/created

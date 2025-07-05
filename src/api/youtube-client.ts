@@ -381,7 +381,7 @@ export class YouTubeClient {
         // Use OAuth if available, otherwise fall back to API key
         const auth = this.isAuthenticated() ? this.oauth2Client : undefined;
         const params: any = {
-          part: ['snippet', 'status', 'statistics', 'contentDetails'],
+          part: ['snippet', 'status', 'statistics', 'contentDetails', 'recordingDetails'],
           id: videoIds
         };
 
@@ -394,7 +394,15 @@ export class YouTubeClient {
 
         const response = await this.youtube.videos.list(params);
 
-        return (response.data.items || []) as YouTubeVideo[];
+        // Map recordingDetails.recordingDate to recordingDate for each video
+        const items = (response.data.items || []).map((item: any) => {
+          if (item.recordingDetails && item.recordingDetails.recordingDate) {
+            item.recordingDate = item.recordingDetails.recordingDate;
+          }
+          return item;
+        });
+
+        return items as YouTubeVideo[];
       },
       Math.ceil(videoIds.length / 50), // API cost
       'getVideoDetails'
