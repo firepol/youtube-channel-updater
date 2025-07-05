@@ -624,6 +624,39 @@ class VideoProcessor {
   }
 
   /**
+   * Update local video database after successful API update
+   */
+  private async updateLocalDatabase(videoId: string, updatedVideo: LocalVideo): Promise<void> {
+    try {
+      const videoDatabasePath = 'data/videos.json';
+      const videoDatabase = await fs.readJson(videoDatabasePath) as LocalVideo[];
+      
+      // Find and update the video in the database
+      const videoIndex = videoDatabase.findIndex(v => v.id === videoId);
+      if (videoIndex !== -1) {
+        // Update the video data with new values
+        videoDatabase[videoIndex] = {
+          ...videoDatabase[videoIndex],
+          title: updatedVideo.title,
+          description: updatedVideo.description,
+          tags: updatedVideo.tags,
+          recordingDate: updatedVideo.recordingDate,
+          lastUpdated: new Date().toISOString()
+        };
+        
+        // Write the updated database back to file
+        await fs.writeJson(videoDatabasePath, videoDatabase, { spaces: 2 });
+        logVerbose(`Updated local database for video ${videoId}`);
+      } else {
+        getLogger().warning(`Video ${videoId} not found in local database`);
+      }
+    } catch (error) {
+      getLogger().error(`Failed to update local database for video ${videoId}: ${error instanceof Error ? error.message : String(error)}`);
+      // Don't throw - this is not critical for the main operation
+    }
+  }
+
+  /**
    * Process a single video
    */
   private async processVideo(video: LocalVideo, options: ProcessingOptions): Promise<boolean> {
@@ -671,8 +704,21 @@ class VideoProcessor {
       }
       
       // Update video via YouTube API
-      await this.youtubeClient.updateVideo(video.id, videoSettings);
+      const updatedVideo = await this.youtubeClient.updateVideo(video.id, videoSettings);
       
+      // Create LocalVideo object with updated data
+      const updatedLocalVideo: LocalVideo = {
+        ...video,
+        title: newTitle,
+        description: newDescription,
+        tags: newTags,
+        recordingDate: recordingDate,
+        lastUpdated: new Date().toISOString()
+      };
+      
+      // Update local database
+      await this.updateLocalDatabase(video.id, updatedLocalVideo);
+
       // Update change history
       await this.updateHistory({
         date: new Date().toISOString(),
@@ -801,6 +847,15 @@ class VideoProcessor {
     const minutes = Math.floor(duration / 60000);
     const seconds = Math.floor((duration % 60000) / 1000);
     result.processingTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    
+    // Log summary
+    getLogger().info('=== PROCESSING SUMMARY ===');
+    getLogger().info(`Total videos processed: ${result.processedVideos}`);
+    getLogger().info(`Successful updates: ${result.successfulUpdates}`);
+    getLogger().info(`Failed updates: ${result.failedUpdates}`);
+    getLogger().info(`Processing time: ${result.processingTime}`);
+    getLogger().info('Local database has been updated to reflect changes');
+    getLogger().info('=== END PROCESSING SUMMARY ===');
     
     return result;
   }
