@@ -1,6 +1,6 @@
 # YouTube Channel Updater - Development Tracking
 
-**Last Updated: 2025-06-29 20:45:30**
+**Last Updated: 2025-06-29 21:30:15**
 
 ## Project Status: Implementation Phase 🔄
 
@@ -185,6 +185,15 @@
   - [x] **Enhanced Reporting**: Detailed preview reports with validation status
   - [x] **Safety Features**: Zero API calls, read-only operations, comprehensive validation
 - **Notes**: Comprehensive video processing engine implemented with backup system, change history, and robust error handling. Basic dry-run functionality is implemented. Enhanced dry-run specifications have been added to specs and PRDs for future implementation.
+- **Title-Based Tags Feature Added** (2025-06-29 21:30:15):
+  - [x] **Configuration System**: Added `titleBasedTags` array to video processing config
+  - [x] **Regex Pattern Matching**: Support for case-sensitive and case-insensitive pattern matching
+  - [x] **Multiple Tags Per Pattern**: Each pattern can add multiple tags to videos
+  - [x] **Fallback Logic**: Maintains legacy keyword extraction when no title-based tags match
+  - [x] **TypeScript Integration**: Added `TitleBasedTagRule` interface and updated `VideoProcessingConfig`
+  - [x] **Validation**: Added regex pattern validation in configuration validation
+  - [x] **Example Configuration**: Created `config.example/video-processing-title-tags.example.json`
+  - [x] **Documentation**: Updated configuration with comprehensive examples for The Division 2 content
 
 ### 3.3 Playlist Management
 - **Status**: ✅ Complete

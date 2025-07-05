@@ -285,12 +285,19 @@ export interface DescriptionTransform {
   replacement: string;
 }
 
+export interface TitleBasedTagRule {
+  pattern: string;
+  tags: string[];
+  caseSensitive?: boolean;
+}
+
 export interface VideoProcessingConfig {
   titleTransform?: TitleTransform;
   descriptionTransform?: DescriptionTransform;
   titleTransforms?: TitleTransform[];
   descriptionTransforms?: DescriptionTransform[];
   baseTags: string[];
+  titleBasedTags?: TitleBasedTagRule[];
   maxDynamicTags: number;
   metadataVersion: string;
   videoSettings: {

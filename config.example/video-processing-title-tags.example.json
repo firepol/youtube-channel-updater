@@ -1,0 +1,191 @@
+{
+  "titleTransforms": [
+    {
+      "pattern": "Hollywood$",
+      "replacement": "/ Hollywood"
+    },
+    {
+      "pattern": "(?<!/) Golden Bullet$",
+      "replacement": " / Golden Bullet"
+    },
+    {
+      "pattern": "DZ (?!West|East|South)",
+      "replacement": "DZ: "
+    },
+    {
+      "pattern": "Heroic$",
+      "replacement": "/ Heroic"
+    },
+    {
+      "pattern": "Challenging$",
+      "replacement": "/ Challenging"
+    },
+    {
+      "pattern": "CP",
+      "replacement": "Control Point"
+    },
+    {
+      "pattern": "DZ West ",
+      "replacement": "DZ West: "
+    },
+    {
+      "pattern": "DZ South ",
+      "replacement": "DZ South: "
+    },
+    {
+      "pattern": "DZ East ",
+      "replacement": "DZ East: "
+    },
+    {
+      "pattern": "^Tom Clancy's\\s+The\\s+Division\\s+2\\s+(.+)\\s+(\\d{4}-\\d{2}-\\d{2})$",
+      "replacement": "$1 / The Division 2 / $2"
+    },
+    {
+      "pattern": "^Tom Clancy's\\s+The\\s+Division\\s+2\\s*-?\\s*",
+      "replacement": ""
+    },
+    {
+      "pattern": "^(\\d{4}) (\\d{2}) (\\d{2})\\s+(\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (.+)",
+      "replacement": "$8 / The Division 2 / $1-$2-$3"
+    },
+    {
+      "pattern": "GB gameplay",
+      "replacement": "/ Golden Bullet"
+    },
+    {
+      "pattern": "GB",
+      "replacement": "/ Golden Bullet"
+    },
+    {
+      "pattern": "DZ South: Entrance",
+      "replacement": "DZ South Entrance"
+    }
+  ],
+  "descriptionTransforms": [
+    {
+      "pattern": "^Tom Clancy's\\s+The\\s+Division\\s+2\\s+(\\d{4})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(.+)$",
+      "replacement": "Tom Clancy's The Division 2 / $1-$2-$3 $4:$5"
+    },
+    {
+      "pattern": "^(\\d{4})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})$",
+      "replacement": "Tom Clancy's The Division 2 / $1-$2-$3 $4:$5"
+    }
+  ],
+  "recordingDateExtractPattern": "(?<year>\\d{4})[ .-]?(?<month>\\d{2})[ .-]?(?<day>\\d{2})[ .-]+(?<hour>\\d{2})[ .-]?(?<minute>\\d{2})[ .-]?(?<second>\\d{2})[ .-]?(?<centisecond>\\d{2})",
+  "baseTags": [
+    "The Division 2",
+    "Gaming",
+    "Gameplay",
+    "4K"
+  ],
+  "titleBasedTags": [
+    {
+      "pattern": "DZ|Dark Zone",
+      "tags": ["Dark Zone", "PvP"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "Heroic",
+      "tags": ["Heroic", "Endgame"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "Challenging",
+      "tags": ["Challenging", "Endgame"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "Golden Bullet|GB",
+      "tags": ["Golden Bullet", "Global Event"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "Hollywood",
+      "tags": ["Hollywood", "Global Event"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "Control Point|CP",
+      "tags": ["Control Point", "PvE"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "going rogue|rogue",
+      "tags": ["Rogue", "PvP"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "Countdown",
+      "tags": ["Countdown", "Endgame"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "Summit",
+      "tags": ["Summit", "Endgame"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "Raid|Raid\\s+\\d+",
+      "tags": ["Raid", "Endgame"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "Invaded",
+      "tags": ["Invaded", "Black Tusk"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "Black Tusk",
+      "tags": ["Black Tusk", "Faction"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "Hyena|Outcast|True Sons",
+      "tags": ["Faction"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "gameplay",
+      "tags": ["Gameplay"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "walkthrough",
+      "tags": ["Walkthrough"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "review",
+      "tags": ["Review"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "tutorial",
+      "tags": ["Tutorial"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "guide",
+      "tags": ["Guide"],
+      "caseSensitive": false
+    },
+    {
+      "pattern": "tips|tricks",
+      "tags": ["Tips & Tricks"],
+      "caseSensitive": false
+    }
+  ],
+  "maxDynamicTags": 2,
+  "metadataVersion": "v1.0",
+  "_comment": "Title-based tags configuration allows you to map specific text patterns in video titles to specific tags",
+  "_comment2": "Patterns are regex and can be case-sensitive or case-insensitive",
+  "_comment3": "Multiple tags can be added per pattern match",
+  "_comment4": "The system will respect maxDynamicTags limit",
+  "_comment5": "metadataVersion will be used with processing ID format: [metadata v1.1: proc_20250627_100132]",
+  "videoSettings": {
+    "madeForKids": false,
+    "license": "creativeCommon",
+    "categoryId": "20",
+    "allowRemixing": true
+  }
+} 

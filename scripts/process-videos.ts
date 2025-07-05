@@ -259,25 +259,47 @@ class VideoProcessor {
    */
   private generateTags(title: string): string[] {
     const tags = [...this.config.baseTags];
-    
-    // Extract dynamic tags from title (simple keyword extraction)
-    const words = title.toLowerCase().split(/\s+/);
     const dynamicTags: string[] = [];
     
-    // Add some common gaming keywords as dynamic tags
-    const gamingKeywords = ['gameplay', 'walkthrough', 'review', 'tutorial', 'guide', 'tips', 'tricks'];
-    for (const keyword of gamingKeywords) {
-      if (words.includes(keyword) && dynamicTags.length < this.config.maxDynamicTags) {
-        dynamicTags.push(keyword.charAt(0).toUpperCase() + keyword.slice(1));
+    // Apply title-based tag rules if configured
+    if (this.config.titleBasedTags && Array.isArray(this.config.titleBasedTags)) {
+      for (const rule of this.config.titleBasedTags) {
+        try {
+          const regex = new RegExp(rule.pattern, rule.caseSensitive ? '' : 'i');
+          if (regex.test(title)) {
+            // Add all tags from this rule
+            for (const tag of rule.tags) {
+              if (dynamicTags.length < this.config.maxDynamicTags) {
+                dynamicTags.push(tag);
+              }
+            }
+          }
+        } catch (error) {
+          // Log regex error but continue processing
+          console.warn(`Invalid regex pattern in titleBasedTags: ${rule.pattern}`);
+        }
       }
     }
     
-    // Add game-specific keywords
-    if (title.toLowerCase().includes('division')) {
-      dynamicTags.push('The Division');
-    }
-    if (title.toLowerCase().includes('dark zone') || title.toLowerCase().includes('dz')) {
-      dynamicTags.push('Dark Zone');
+    // Fallback to legacy keyword extraction if no title-based tags found
+    if (dynamicTags.length === 0) {
+      const words = title.toLowerCase().split(/\s+/);
+      
+      // Add some common gaming keywords as dynamic tags
+      const gamingKeywords = ['gameplay', 'walkthrough', 'review', 'tutorial', 'guide', 'tips', 'tricks'];
+      for (const keyword of gamingKeywords) {
+        if (words.includes(keyword) && dynamicTags.length < this.config.maxDynamicTags) {
+          dynamicTags.push(keyword.charAt(0).toUpperCase() + keyword.slice(1));
+        }
+      }
+      
+      // Add game-specific keywords
+      if (title.toLowerCase().includes('division')) {
+        dynamicTags.push('The Division');
+      }
+      if (title.toLowerCase().includes('dark zone') || title.toLowerCase().includes('dz')) {
+        dynamicTags.push('Dark Zone');
+      }
     }
     
     // Combine and deduplicate tags
@@ -348,6 +370,17 @@ class VideoProcessor {
     // Check base tags
     if (!this.config.baseTags || this.config.baseTags.length === 0) {
       warnings.push('No base tags configured');
+    }
+
+    // Check title-based tag patterns
+    if (this.config.titleBasedTags && Array.isArray(this.config.titleBasedTags)) {
+      for (const rule of this.config.titleBasedTags) {
+        try {
+          new RegExp(rule.pattern, rule.caseSensitive ? '' : 'i');
+        } catch (error) {
+          errors.push(`Invalid title-based tag pattern: ${rule.pattern}`);
+        }
+      }
     }
 
     // Check metadata version

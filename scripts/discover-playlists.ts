@@ -155,11 +155,27 @@ class PlaylistDiscoverer {
     );
     
     const mergedPlaylists: PlaylistRule[] = [];
+    let updatedCount = 0;
     
     for (const discoveredPlaylist of discoveredPlaylists) {
       const existingPlaylist = existingPlaylists.get(discoveredPlaylist.id);
       
       if (existingPlaylist) {
+        // Check if title or description has changed
+        const titleChanged = discoveredPlaylist.title !== existingPlaylist.title;
+        const descriptionChanged = discoveredPlaylist.description !== existingPlaylist.description;
+        
+        if (titleChanged || descriptionChanged) {
+          updatedCount++;
+          this.logger.info(`Updating playlist "${discoveredPlaylist.title}":`);
+          if (titleChanged) {
+            this.logger.info(`  Title: "${existingPlaylist.title}" → "${discoveredPlaylist.title}"`);
+          }
+          if (descriptionChanged) {
+            this.logger.info(`  Description: "${existingPlaylist.description}" → "${discoveredPlaylist.description}"`);
+          }
+        }
+        
         // Update existing playlist - preserve user fields, update API fields
         mergedPlaylists.push({
           id: discoveredPlaylist.id,
@@ -169,7 +185,9 @@ class PlaylistDiscoverer {
           visibility: existingPlaylist.visibility // Preserve user-configured visibility
         });
         
-        this.logger.verbose(`Updated existing playlist: ${discoveredPlaylist.title}`);
+        if (!titleChanged && !descriptionChanged) {
+          this.logger.verbose(`No changes for existing playlist: ${discoveredPlaylist.title}`);
+        }
       } else {
         // Add new playlist with defaults
         mergedPlaylists.push({
@@ -182,6 +200,10 @@ class PlaylistDiscoverer {
         
         this.logger.info(`Added new playlist: ${discoveredPlaylist.title}`);
       }
+    }
+    
+    if (updatedCount > 0) {
+      this.logger.info(`Updated ${updatedCount} existing playlists with new API data`);
     }
     
     return { playlists: mergedPlaylists };
