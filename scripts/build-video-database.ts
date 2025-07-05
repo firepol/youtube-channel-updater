@@ -29,12 +29,14 @@ class VideoDatabaseBuilder {
   private outputFile: string;
   private targetChannelId: string;
   private useOAuth: boolean;
+  private forceFullFetch: boolean;
 
   constructor(args: CommandLineArgs = {}) {
     this.stateFile = 'data/video-db-state.json';
     this.outputFile = args.outputFile || 'data/videos.json';
     this.targetChannelId = args.channelId || '';
     this.useOAuth = args.useOAuth || false;
+    this.forceFullFetch = false; // Will be set by main() function
   }
 
   /**
@@ -372,13 +374,17 @@ class VideoDatabaseBuilder {
 
           this.logger.info(`Page ${pageCount}: Found ${response.items.length} videos, ${newVideosCount} new, ${updatedVideosCount} updated`);
           
-          // Smart page fetching logic:
+          // Smart page fetching logic (disabled when forceFullFetch is true):
           // - If we found new videos, continue to next page
           // - If we found changes in the oldest video of this page, continue to next page (changes might cascade)
           // - If we found only changes in newer videos, stop here (no need to check older videos)
-          if (newVideosCount === 0 && !oldestVideoChanged) {
+          if (!this.forceFullFetch && newVideosCount === 0 && !oldestVideoChanged) {
             this.logger.info('No new videos and no changes in oldest video, stopping incremental update');
             break;
+          }
+          
+          if (this.forceFullFetch) {
+            this.logger.info('Force full fetch mode: continuing to fetch all pages');
           }
 
           // Update progress
@@ -551,6 +557,8 @@ async function main() {
 
     if (forceFullFetch && (!args.command || args.command === 'build')) {
       await builder.clean();
+      // Set the forceFullFetch flag on the builder instance
+      (builder as any).forceFullFetch = true;
     }
 
     const command = args.command || 'build';
