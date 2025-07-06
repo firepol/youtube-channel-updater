@@ -753,11 +753,22 @@ class VideoProcessor {
         getLogger().info(`  Tags: [${video.tags?.join(', ') || 'none'}] → [${newTags.join(', ')}]`);
         return true;
       }
-      
       // Update video via YouTube API
-      const updatedVideo = await this.youtubeClient.updateVideo(video.id, videoSettings);
-      
-      // Create LocalVideo object with updated data
+      let updatedVideo;
+      try {
+        updatedVideo = await this.youtubeClient.updateVideo(video.id, videoSettings);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        // Log and rethrow rate limit or quota errors to be handled by the main loop
+        if (errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('quota')) {
+          getLogger().error(`Rate limit or quota error for video ${video.id}: ${errorMessage}`);
+          throw error;
+        }
+        // Log and return false for other API errors (do not update local DB)
+        getLogger().error(`API error for video ${video.id}: ${errorMessage}`);
+        return false;
+      }
+      // Only update local database if API update succeeded
       const updatedLocalVideo: LocalVideo = {
         ...video,
         title: newTitle,
@@ -769,8 +780,6 @@ class VideoProcessor {
         categoryId: '20',
         lastUpdated: new Date().toISOString()
       };
-      
-      // Update local database
       await this.updateLocalDatabase(video.id, updatedLocalVideo);
 
       // Update change history
@@ -796,6 +805,10 @@ class VideoProcessor {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       getLogger().error(`Failed to process video ${video.id}: ${errorMessage}`, error as Error);
+      // Rethrow rate limit or quota errors to be handled by the main loop
+      if (errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('quota')) {
+        throw error;
+      }
       return false;
     }
   }
@@ -867,7 +880,6 @@ class VideoProcessor {
     
     for (const video of videos) {
       result.processedVideos++;
-      
       try {
         const success = await this.processVideo(video, options);
         if (success) {
@@ -881,13 +893,18 @@ class VideoProcessor {
           });
         }
       } catch (error) {
-        result.failedUpdates++;
         const errorMessage = error instanceof Error ? error.message : String(error);
+        result.failedUpdates++;
         result.errors.push({
           videoId: video.id,
           error: errorMessage,
           attempts: 1
         });
+        // Stop immediately on rate limit error
+        if (errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('quota')) {
+          getLogger().error('Rate limit error detected. Stopping all further processing.');
+          break;
+        }
       }
       
       // Progress update every 10 videos
