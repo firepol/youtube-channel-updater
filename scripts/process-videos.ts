@@ -665,6 +665,12 @@ class VideoProcessor {
           description: updatedVideo.description,
           tags: updatedVideo.tags,
           recordingDate: updatedVideo.recordingDate,
+          privacyStatus: updatedVideo.privacyStatus,
+          madeForKids: updatedVideo.madeForKids,
+          license: updatedVideo.license,
+          categoryId: updatedVideo.categoryId,
+          embeddable: updatedVideo.embeddable,
+          publicStatsViewable: updatedVideo.publicStatsViewable,
           lastUpdated: new Date().toISOString()
         };
         
