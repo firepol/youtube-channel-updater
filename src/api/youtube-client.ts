@@ -454,10 +454,19 @@ export class YouTubeClient {
       madeForKids?: boolean;
       license?: string;
       recordingDate?: string;
-    }
+      privacyStatus?: string;
+    },
+    postUpdateCheck?: boolean
   ): Promise<YouTubeVideo> {
     return this.executeApiCall(
       async () => {
+        const statusObj: any = {
+          madeForKids: updates.madeForKids,
+          license: updates.license
+        };
+        if (updates.privacyStatus) {
+          statusObj.privacyStatus = updates.privacyStatus;
+        }
         const response = await this.youtube.videos.update({
           auth: this.oauth2Client,
           part: ['snippet', 'status'],
@@ -470,16 +479,30 @@ export class YouTubeClient {
               categoryId: updates.categoryId,
               recordingDate: updates.recordingDate
             },
-            status: {
-              madeForKids: updates.madeForKids,
-              license: updates.license
-            }
+            status: statusObj
           }
         });
 
+        // Optionally verify the update
+        if (postUpdateCheck && updates.privacyStatus) {
+          // Fetch the video status again
+          const checkResp = await this.youtube.videos.list({
+            auth: this.oauth2Client,
+            part: ['status'],
+            id: [videoId]
+          });
+          const updated = checkResp.data.items?.[0]?.status;
+          if (!updated) {
+            throw new Error(`Post-update check failed: video ${videoId} not found`);
+          }
+          if (updated.privacyStatus !== updates.privacyStatus || (typeof updates.madeForKids === 'boolean' && updated.madeForKids !== updates.madeForKids)) {
+            throw new Error(`Post-update check failed: privacyStatus is '${updated.privacyStatus}', madeForKids is '${updated.madeForKids}' (expected: '${updates.privacyStatus}', '${updates.madeForKids}')`);
+          }
+        }
+
         return response.data as YouTubeVideo;
       },
-      50, // High cost for video updates
+      50,
       'updateVideo'
     );
   }

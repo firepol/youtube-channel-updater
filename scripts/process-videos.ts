@@ -763,9 +763,17 @@ class VideoProcessor {
       // Update video via YouTube API
       let updatedVideo;
       try {
-        updatedVideo = await this.youtubeClient.updateVideo(video.id, videoSettings);
+        updatedVideo = await this.youtubeClient.updateVideo(
+          video.id,
+          videoSettings,
+          shouldPublish // postUpdateCheck only when publishing
+        );
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
+        if (shouldPublish && errorMessage.includes('Post-update check failed')) {
+          getLogger().error(`Publish verification failed for video ${video.id}: ${errorMessage}`);
+          return false;
+        }
         if (errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('quota')) {
           getLogger().error(`Rate limit or quota error for video ${video.id}: ${errorMessage}`);
           throw error;
