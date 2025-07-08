@@ -683,11 +683,14 @@ class VideoProcessor {
   /**
    * Process a single video
    */
-  private async processVideo(video: LocalVideo, options: ProcessingOptions): Promise<boolean> {
+  private async processVideo(video: LocalVideo, options: ProcessingOptions & { publish?: boolean }): Promise<boolean> {
     try {
-      // Check if video needs processing
-      if (!options.force && !this.needsProcessing(video)) {
-        logVerbose(`Skipping video ${video.id} - already processed with current metadata version`);
+      // Check if video needs processing or publishing
+      const isPublish = !!options.publish;
+      const shouldPublish = isPublish && video.privacyStatus !== 'public';
+      const needsTransform = !isPublish && (!options.force && !this.needsProcessing(video)) === false;
+      if (!shouldPublish && !needsTransform) {
+        logVerbose(`Skipping video ${video.id} - already processed and public`);
         return true;
       }
 
@@ -701,16 +704,23 @@ class VideoProcessor {
         }
       }
 
-      // Transform video metadata
-      const newTitle = this.transformTitle(video.title, recordingDate);
-      const newDescription = this.transformDescription(video.description, video.title, recordingDate);
-      const newTags = this.generateTags(video.title);
+      // Transform video metadata if not just publishing
+      let newTitle = video.title;
+      let newDescription = video.description;
+      let newTags = video.tags || [];
+      let updateMetadata = false;
+      if (!isPublish || (isPublish && (options.force || this.needsProcessing(video)))) {
+        newTitle = this.transformTitle(video.title, recordingDate);
+        newDescription = this.transformDescription(video.description, video.title, recordingDate);
+        newTags = this.generateTags(video.title);
+        updateMetadata = (newTitle !== video.title) || (newDescription !== video.description) || (JSON.stringify(newTags) !== JSON.stringify(video.tags || []));
+      }
 
-      // Check current YouTube status to avoid unnecessary updates
-      let currentStatus: { madeForKids: boolean | null; license: string | null; categoryId: string | null } | null = null;
+      // Check current YouTube status
+      let currentStatus: { madeForKids: boolean | null; license: string | null; categoryId: string | null; privacyStatus?: string | null } | null = null;
       try {
         currentStatus = await this.youtubeClient.getVideoStatus(video.id);
-        logVerbose(`Current YouTube status for ${video.id}: madeForKids=${currentStatus.madeForKids}, license=${currentStatus.license}, categoryId=${currentStatus.categoryId}`);
+        logVerbose(`Current YouTube status for ${video.id}: madeForKids=${currentStatus.madeForKids}, license=${currentStatus.license}, categoryId=${currentStatus.categoryId}, privacyStatus=${currentStatus.privacyStatus}`);
       } catch (error) {
         logVerbose(`Could not fetch current status for ${video.id}, will set all fields: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -726,48 +736,44 @@ class VideoProcessor {
         publicStatsViewable: true,
         shortsRemixing: 'allow'
       };
-
-      // Only set madeForKids if it's not already false
-      if (currentStatus?.madeForKids !== false) {
+      if (shouldPublish) {
+        videoSettings.privacyStatus = 'public';
         videoSettings.madeForKids = false;
-        logVerbose(`Setting madeForKids to false for ${video.id} (current: ${currentStatus?.madeForKids})`);
-      } else {
-        logVerbose(`Skipping madeForKids update for ${video.id} (already false)`);
+      } else if (currentStatus?.madeForKids !== false) {
+        videoSettings.madeForKids = false;
       }
-
-      // Only add recordingDate if it's defined
       if (recordingDate) {
         videoSettings.recordingDate = recordingDate;
-        logVerbose(`Setting recording date for video ${video.id}: ${recordingDate}`);
-      } else {
-        logVerbose(`No recording date available for video ${video.id}`);
       }
-      
+
       // Log all settings being applied
-      logVerbose(`Video settings for ${video.id}: title="${videoSettings.title}", categoryId=${videoSettings.categoryId}, madeForKids=${videoSettings.madeForKids}, license=${videoSettings.license}, recordingDate=${videoSettings.recordingDate || 'none'}`);
-      
+      logVerbose(`Video settings for ${video.id}: title="${videoSettings.title}", categoryId=${videoSettings.categoryId}, madeForKids=${videoSettings.madeForKids}, license=${videoSettings.license}, privacyStatus=${videoSettings.privacyStatus || video.privacyStatus}, recordingDate=${videoSettings.recordingDate || 'none'}`);
+
       if (options.dryRun) {
         getLogger().info(`[DRY RUN] Would update video ${video.id}:`);
-        getLogger().info(`  Title: "${video.title}" → "${newTitle}"`);
-        getLogger().info(`  Description: "${video.description}" → "${newDescription}"`);
-        getLogger().info(`  Tags: [${video.tags?.join(', ') || 'none'}] → [${newTags.join(', ')}]`);
+        if (shouldPublish) {
+          getLogger().info(`  Would publish video (privacyStatus: ${video.privacyStatus} -> public)`);
+        }
+        if (updateMetadata) {
+          getLogger().info(`  Would update metadata (title/description/tags)`);
+        }
         return true;
       }
+
       // Update video via YouTube API
       let updatedVideo;
       try {
         updatedVideo = await this.youtubeClient.updateVideo(video.id, videoSettings);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        // Log and rethrow rate limit or quota errors to be handled by the main loop
         if (errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('quota')) {
           getLogger().error(`Rate limit or quota error for video ${video.id}: ${errorMessage}`);
           throw error;
         }
-        // Log and return false for other API errors (do not update local DB)
         getLogger().error(`API error for video ${video.id}: ${errorMessage}`);
         return false;
       }
+
       // Only update local database if API update succeeded
       const updatedLocalVideo: LocalVideo = {
         ...video,
@@ -775,37 +781,40 @@ class VideoProcessor {
         description: newDescription,
         tags: newTags,
         recordingDate: recordingDate,
-        madeForKids: false, // Always false in our database
+        madeForKids: false,
         license: 'creativeCommon',
         categoryId: '20',
+        privacyStatus: shouldPublish ? 'public' : video.privacyStatus,
         lastUpdated: new Date().toISOString()
       };
       await this.updateLocalDatabase(video.id, updatedLocalVideo);
 
-      // Update change history
-      await this.updateHistory({
-        date: new Date().toISOString(),
-        videoId: video.id,
-        field: 'title',
-        oldValue: video.title,
-        newValue: newTitle
-      });
-      
-      await this.updateHistory({
-        date: new Date().toISOString(),
-        videoId: video.id,
-        field: 'description',
-        oldValue: video.description,
-        newValue: newDescription
-      });
-      
-      getLogger().info(`Successfully updated video ${video.id}`);
+      // Update change history if metadata was updated
+      if (updateMetadata) {
+        await this.updateHistory({
+          date: new Date().toISOString(),
+          videoId: video.id,
+          field: 'title',
+          oldValue: video.title,
+          newValue: newTitle
+        });
+        await this.updateHistory({
+          date: new Date().toISOString(),
+          videoId: video.id,
+          field: 'description',
+          oldValue: video.description,
+          newValue: newDescription
+        });
+      }
+      if (shouldPublish) {
+        getLogger().info(`Published video ${video.id} (privacyStatus set to public)`);
+      } else if (updateMetadata) {
+        getLogger().info(`Updated metadata for video ${video.id}`);
+      }
       return true;
-      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       getLogger().error(`Failed to process video ${video.id}: ${errorMessage}`, error as Error);
-      // Rethrow rate limit or quota errors to be handled by the main loop
       if (errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('quota')) {
         throw error;
       }
@@ -816,7 +825,7 @@ class VideoProcessor {
   /**
    * Process multiple videos
    */
-  async processVideos(videos: LocalVideo[], options: ProcessingOptions): Promise<ProcessingResult> {
+  async processVideos(videos: LocalVideo[], options: ProcessingOptions & { publish?: boolean }): Promise<ProcessingResult> {
     const startTime = Date.now();
     const result: ProcessingResult = {
       processedVideos: 0,
@@ -956,9 +965,10 @@ async function main(): Promise<void> {
     .option('--description-not-contains <text>', 'Direct description not contains filter')
     .option('--min-views <number>', 'Direct views filter')
     .option('--max-views <number>', 'Direct views filter')
+    .option('--publish', 'Publish filtered videos by setting privacyStatus to public and madeForKids to false')
     .parse();
 
-  const options: ProcessingOptions = program.opts();
+  const options: ProcessingOptions & { publish?: boolean } = program.opts();
   
   if (options.verbose) {
     process.env.VERBOSE = 'true';
