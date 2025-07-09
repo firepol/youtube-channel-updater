@@ -47,7 +47,7 @@
     "@typescript-eslint/parser": "^6.8.0",
     "eslint": "^8.51.0",
     "typescript": "^5.2.2",
-    "tsx": "^4.1.1",
+    "tsx": "^4.20.3",
     "vitest": "^0.34.6"
   },
   "engines": {
