@@ -483,6 +483,18 @@ class VideoProcessor {
   }
 
   /**
+   * Validate video metadata (title, description, tags) before API call
+   */
+  private validateVideoMetadata(title: string, description: string, tags: string[]): string[] {
+    const errors: string[] = [];
+    if (title.length > 100) errors.push('Title exceeds 100 character limit');
+    if (title.trim().length === 0) errors.push('Title is empty');
+    if (description.length > 5000) errors.push('Description exceeds 5000 character limit');
+    if (tags.length > 500) errors.push('Too many tags');
+    return errors;
+  }
+
+  /**
    * Extract recording date from title using a regex pattern from config
    */
   private extractRecordingDateFromTitle(title: string): string | undefined {
@@ -722,6 +734,17 @@ class VideoProcessor {
         updateMetadata = (newTitle !== video.title) || (newDescription !== video.description) || (JSON.stringify(newTags) !== JSON.stringify(video.tags || []));
       }
 
+      // === VALIDATION BEFORE API CALL ===
+      const validationErrors = this.validateVideoMetadata(newTitle, newDescription, newTags);
+      if (validationErrors.length > 0) {
+        getLogger().error(`Validation error for video ${video.id}: "${newTitle}"`);
+        for (const err of validationErrors) {
+          getLogger().error(`  - ${err}`);
+        }
+        return false;
+      }
+      // === END VALIDATION ===
+
       // Check current YouTube status
       let currentStatus: { madeForKids: boolean | null; license: string | null; categoryId: string | null; privacyStatus?: string | null } | null = null;
       try {
@@ -885,6 +908,20 @@ class VideoProcessor {
       if (preview.preview.length > 3) {
         getLogger().info(`... and ${preview.preview.length - 3} more videos`);
       }
+
+      if (preview.preview.some(video => video.validation.errors.length > 0)) {
+        getLogger().error('Per-video validation errors:');
+        for (const video of preview.preview) {
+          if (video.validation.errors.length > 0) {
+            getLogger().error(
+              `  Video ${video.videoId}: "${video.proposedState.title}"`
+            );
+            for (const err of video.validation.errors) {
+              getLogger().error(`    - ${err}`);
+            }
+          }
+        }
+      }
       
       getLogger().info('=== END DRY RUN PREVIEW ===');
       
@@ -901,9 +938,39 @@ class VideoProcessor {
     
     getLogger().info(`Starting to process ${videos.length} videos...`);
     
+    const validationFailures: Array<{videoId: string, title: string, errors: string[]}> = [];
+
     for (const video of videos) {
       result.processedVideos++;
       try {
+        const isPublish = !!options.publish;
+        let recordingDate = video.recordingDate;
+        if (!recordingDate) {
+          recordingDate = this.extractRecordingDateFromTitle(video.title);
+        }
+        let newTitle = video.title;
+        let newDescription = video.description;
+        let newTags = video.tags || [];
+        if (!isPublish || (isPublish && (options.force || this.needsProcessing(video)))) {
+          newTitle = this.transformTitle(video.title, recordingDate);
+          newDescription = this.transformDescription(video.description, video.title, recordingDate);
+          newTags = this.generateTags(video.title);
+        }
+        const validationErrors = this.validateVideoMetadata(newTitle, newDescription, newTags);
+        if (validationErrors.length > 0) {
+          getLogger().error(`Validation error for video ${video.id}: "${newTitle}"`);
+          for (const err of validationErrors) {
+            getLogger().error(`  - ${err}`);
+          }
+          validationFailures.push({videoId: video.id, title: newTitle, errors: validationErrors});
+          result.failedUpdates++;
+          result.errors.push({
+            videoId: video.id,
+            error: validationErrors.join('; '),
+            attempts: 0
+          });
+          continue;
+        }
         const success = await this.processVideo(video, options);
         if (success) {
           result.successfulUpdates++;
@@ -948,6 +1015,15 @@ class VideoProcessor {
     getLogger().info(`Successful updates: ${result.successfulUpdates}`);
     getLogger().info(`Failed updates: ${result.failedUpdates}`);
     getLogger().info(`Processing time: ${result.processingTime}`);
+    if (validationFailures.length > 0) {
+      getLogger().error('Validation errors (summary):');
+      for (const v of validationFailures) {
+        getLogger().error(`  Video ${v.videoId}: "${v.title}"`);
+        for (const err of v.errors) {
+          getLogger().error(`    - ${err}`);
+        }
+      }
+    }
     getLogger().info('Local database has been updated to reflect changes');
     getLogger().info('=== END PROCESSING SUMMARY ===');
     
