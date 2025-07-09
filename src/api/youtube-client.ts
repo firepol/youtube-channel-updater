@@ -455,6 +455,8 @@ export class YouTubeClient {
       license?: string;
       recordingDate?: string;
       privacyStatus?: string;
+      embeddable?: boolean;
+      publicStatsViewable?: boolean;
     },
     postUpdateCheck?: boolean
   ): Promise<YouTubeVideo> {
@@ -466,6 +468,12 @@ export class YouTubeClient {
         };
         if (updates.privacyStatus) {
           statusObj.privacyStatus = updates.privacyStatus;
+        }
+        if (typeof updates.embeddable === 'boolean') {
+          statusObj.embeddable = updates.embeddable;
+        }
+        if (typeof updates.publicStatsViewable === 'boolean') {
+          statusObj.publicStatsViewable = updates.publicStatsViewable;
         }
         const response = await this.youtube.videos.update({
           auth: this.oauth2Client,

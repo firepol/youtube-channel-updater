@@ -65,9 +65,9 @@ class VideoDatabaseBuilder {
       // Determine target channel ID
       if (!this.targetChannelId) {
         this.targetChannelId = this.config.youtube.channelId;
-        this.logger.info(`Using configured channel ID: ${this.targetChannelId}`);
+        this.logger.info(`[DEBUG] Using configured channel ID: ${this.targetChannelId}`);
       } else {
-        this.logger.info(`Using specified channel ID: ${this.targetChannelId}`);
+        this.logger.info(`[DEBUG] Using specified channel ID: ${this.targetChannelId}`);
       }
 
       // Initialize YouTube client
@@ -288,6 +288,48 @@ class VideoDatabaseBuilder {
     try {
       this.logger.info('Starting video database build...');
 
+      // If forceFullFetch, do a complete rebuild from scratch
+      if (this.forceFullFetch) {
+        this.logger.info('Force full fetch mode: fetching all videos from uploads playlist...');
+        let allVideos: LocalVideo[] = [];
+        let pageToken: string | undefined = undefined;
+        let pageCount = 0;
+        const maxResults = 50;
+        do {
+          pageCount++;
+          this.logger.info(`Fetching page ${pageCount}...`);
+          // Use OAuth for complete access (public, unlisted, private)
+          const playlistResponse: any = await this.youtubeClient['youtube'].playlistItems.list({
+            auth: this.youtubeClient['oauth2Client'],
+            part: ['snippet'],
+            playlistId: (await this.youtubeClient['youtube'].channels.list({
+              auth: this.youtubeClient['oauth2Client'],
+              part: ['contentDetails'],
+              mine: true
+            })).data.items[0].contentDetails.relatedPlaylists.uploads,
+            maxResults,
+            pageToken
+          });
+          const items = playlistResponse.data.items || [];
+          if (items.length === 0) break;
+          // Get video IDs
+          const videoIds = items.map((item: any) => item.snippet?.resourceId?.videoId).filter(Boolean);
+          // Fetch video details
+          const videos = await this.youtubeClient.getVideoDetails(videoIds);
+          // Convert to LocalVideo and accumulate
+          allVideos.push(...videos.map(v => this.convertToLocalVideo(v)));
+          this.logger.info(`Fetched ${videos.length} videos (total: ${allVideos.length})`);
+          pageToken = playlistResponse.data.nextPageToken;
+        } while (pageToken);
+        // Save all videos
+        await this.saveVideos(allVideos);
+        this.logger.success(`Video database build completed! Total videos: ${allVideos.length}`);
+        const withDates = allVideos.filter(v => v.datetime).length;
+        const withoutDates = allVideos.length - withDates;
+        this.logger.info(`Statistics: ${withDates} videos with dates, ${withoutDates} videos without dates`);
+        return;
+      }
+
       // Load existing videos from database
       let existingVideos: LocalVideo[] = [];
       if (await fs.pathExists(this.outputFile)) {
@@ -375,16 +417,13 @@ class VideoDatabaseBuilder {
           this.logger.info(`Page ${pageCount}: Found ${response.items.length} videos, ${newVideosCount} new, ${updatedVideosCount} updated`);
           
           // Smart page fetching logic (disabled when forceFullFetch is true):
-          // - If we found new videos, continue to next page
-          // - If we found changes in the oldest video of this page, continue to next page (changes might cascade)
-          // - If we found only changes in newer videos, stop here (no need to check older videos)
-          if (!this.forceFullFetch && newVideosCount === 0 && !oldestVideoChanged) {
-            this.logger.info('No new videos and no changes in oldest video, stopping incremental update');
-            break;
-          }
-          
+          // - If forceFullFetch, always continue to next page until API is done
+          // - Otherwise, use smart incremental logic
           if (this.forceFullFetch) {
             this.logger.info('Force full fetch mode: continuing to fetch all pages');
+          } else if (newVideosCount === 0 && !oldestVideoChanged) {
+            this.logger.info('No new videos and no changes in oldest video, stopping incremental update');
+            break;
           }
 
           // Update progress

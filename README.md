@@ -370,6 +370,7 @@ npx tsx scripts/process-videos.ts [options]
 - `npm run process-videos -- --input filtered-videos.json --force` - Force process all videos
 - `npm run process-videos -- --privacy-status unlisted --dry-run` - Preview unlisted video changes
 - `npm run process-videos -- --title-contains "tutorial" --min-views 100 --dry-run` - Preview tutorial videos with 100+ views
+- `npm run process-videos -- --privacy-status private --description-not-contains "metadata" --dry-run`
 
 **Features**:
 - Title and description transformation
