@@ -29,7 +29,30 @@ const mockConfig = {
     license: 'creativeCommon',
     categoryId: '20',
     allowRemixing: true
-  }
+  },
+  // Add titleBasedTags for tag generation tests
+  titleBasedTags: [
+    {
+      pattern: 'The Division',
+      tags: ['The Division'],
+      caseSensitive: false
+    },
+    {
+      pattern: 'Dark Zone',
+      tags: ['Dark Zone'],
+      caseSensitive: false
+    },
+    {
+      pattern: 'DZ',
+      tags: ['Dark Zone'],
+      caseSensitive: false
+    },
+    {
+      pattern: 'GB|Golden Bullet',
+      tags: ['Golden Bullet', 'Global Event'],
+      caseSensitive: false
+    }
+  ]
 };
 
 describe('Video Processing with Named Groups', () => {
