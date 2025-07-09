@@ -305,6 +305,8 @@ export interface VideoProcessingConfig {
     license: string;
     categoryId: string;
     allowRemixing: boolean;
+    embeddable?: boolean;
+    publicStatsViewable?: boolean;
   };
   recordingDateExtractPattern: string;
 }

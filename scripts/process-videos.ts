@@ -736,11 +736,11 @@ class VideoProcessor {
         title: newTitle,
         description: newDescription,
         tags: newTags,
-        categoryId: '20', // Gaming
-        license: 'creativeCommon',
-        embeddable: true,
-        publicStatsViewable: true,
-        shortsRemixing: 'allow'
+        categoryId: this.config.videoSettings?.categoryId || '20',
+        license: this.config.videoSettings?.license || 'creativeCommon',
+        embeddable: typeof this.config.videoSettings?.embeddable === 'boolean' ? this.config.videoSettings.embeddable : true,
+        publicStatsViewable: typeof this.config.videoSettings?.publicStatsViewable === 'boolean' ? this.config.videoSettings.publicStatsViewable : true,
+        shortsRemixing: (typeof this.config.videoSettings?.allowRemixing === 'boolean' ? (this.config.videoSettings.allowRemixing ? 'allow' : 'disallow') : 'allow')
       };
       if (shouldPublish) {
         videoSettings.privacyStatus = 'public';
