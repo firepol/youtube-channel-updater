@@ -34,6 +34,7 @@ interface ProcessingOptions {
   force: boolean;
   verbose: boolean;
   output?: string; // Output file for dry-run reports
+  csv?: string; // Output file for CSV results
   // Filtering options
   filterConfig?: string; // Filter configuration file
   privacyStatus?: string; // Direct privacy status filter
@@ -135,6 +136,21 @@ interface QuotaEstimate {
   dailyQuotaImpact: number;
   processingTimeEstimate: string;
   warnings: string[];
+}
+
+const CSV_HEADER = 'videoId,title,description,privacyStatus,recordingDate,lastUpdated';
+
+function toCsvRow(video: any): string {
+  // Escape double quotes and replace newlines for CSV safety
+  const escape = (val: string) => '"' + String(val ?? '').replace(/"/g, '""').replace(/\n/g, ' ') + '"';
+  return [
+    escape(video.videoId || video.id),
+    escape(video.title || (video.currentState && video.currentState.title)),
+    escape(video.description || (video.currentState && video.currentState.description)),
+    escape(video.privacyStatus || (video.currentState && video.currentState.privacyStatus)),
+    escape(video.recordingDate || (video.currentState && video.currentState.recordingDate)),
+    escape(video.lastUpdated || (video.currentState && video.currentState.lastUpdated) || '')
+  ].join(',');
 }
 
 class VideoProcessor {
@@ -1056,7 +1072,9 @@ async function main(): Promise<void> {
     .option('--min-views <number>', 'Direct views filter')
     .option('--max-views <number>', 'Direct views filter')
     .option('--publish', 'Publish filtered videos by setting privacyStatus to public and madeForKids to false')
-    .parse();
+    .option('--csv <file>', 'Output file for CSV results');
+
+  program.parse();
 
   const options: ProcessingOptions & { publish?: boolean } = program.opts();
   
@@ -1202,6 +1220,40 @@ async function main(): Promise<void> {
       const resultsFile = path.join(logsDir, `processing-results-${new Date().toISOString().split('T')[0]}.json`);
       await fs.writeJson(resultsFile, result, { spaces: 2 });
       getLogger().info(`Results saved to ${resultsFile}`);
+      // Save CSV if requested
+      if (options.csv) {
+        // Collect all processed videos (successes only)
+        const processed: any[] = (await fs.readJson('data/videos.json'));
+        const processedMap = new Map(processed.map((v: any) => [v.id, v]));
+        const updatedVideos = result.errors.length === 0 ? processed : processed.filter((v: any) => result.errors.every((e: any) => e.videoId !== v.id));
+        const csvRows = [CSV_HEADER, ...updatedVideos.map((v: any) => toCsvRow(v))];
+        fs.writeFileSync(options.csv, csvRows.join('\n'));
+        getLogger().info(`CSV results saved to ${options.csv}`);
+      }
+    } else if (options.dryRun && options.csv) {
+      // For dry-run, use the preview list
+      const preview: any[] = result.previewReport && result.previewReport.preview ? result.previewReport.preview : [];
+      // Load videos.json for lastUpdated lookup
+      let videoDbMap: Map<string, any> = new Map();
+      try {
+        const videoDb: any[] = await fs.readJson('data/videos.json');
+        videoDbMap = new Map(videoDb.map((v: any) => [v.id, v]));
+      } catch (e) {
+        // If videos.json is missing, just leave lastUpdated blank
+      }
+      const csvRows = [CSV_HEADER, ...preview.map((v: any) => {
+        const dbVideo = videoDbMap.get(v.videoId);
+        return toCsvRow({
+          videoId: v.videoId,
+          title: v.currentState.title,
+          description: v.currentState.description,
+          privacyStatus: v.currentState.privacyStatus || '',
+          recordingDate: v.currentState.recordingDate || '',
+          lastUpdated: dbVideo ? dbVideo.lastUpdated : ''
+        });
+      })];
+      fs.writeFileSync(options.csv, csvRows.join('\n'));
+      getLogger().info(`CSV results saved to ${options.csv}`);
     }
     
   } catch (error) {

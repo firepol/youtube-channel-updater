@@ -29,6 +29,7 @@ export interface FilterResult {
     likeCount: string;
     commentCount: string;
   } | undefined;
+  lastUpdated?: string;
 }
 
 // Filter configuration interface
@@ -435,7 +436,7 @@ export class VideoFilter {
   /**
    * Apply multiple filter rules to videos (AND logic)
    */
-  private applyFilters(videos: LocalVideo[], rules: FilterRule[]): LocalVideo[] {
+  public applyFilters(videos: LocalVideo[], rules: FilterRule[]): LocalVideo[] {
     return videos.filter(video => {
       return rules.every(rule => this.applyFilterRule(video, rule));
     });
@@ -444,7 +445,7 @@ export class VideoFilter {
   /**
    * Convert video to filter result
    */
-  private convertToFilterResult(video: LocalVideo, matchedRules: string[]): FilterResult {
+  public convertToFilterResult(video: LocalVideo, matchedRules: string[]): FilterResult {
     return {
       videoId: video.id,
       title: video.title,
@@ -454,7 +455,8 @@ export class VideoFilter {
       privacyStatus: video.privacyStatus,
       uploadStatus: video.uploadStatus,
       processingStatus: video.processingStatus,
-      statistics: video.statistics
+      statistics: video.statistics,
+      lastUpdated: video.lastUpdated
     };
   }
 
@@ -541,16 +543,57 @@ export class VideoFilter {
   }
 
   /**
-   * Display full results
+   * Print a human-readable summary of filtered videos
    */
-  private displayResults(filters: FilterRule[], results: FilterResult[]): void {
+  private printVideoSummary(results: FilterResult[]): void {
+    if (results.length === 0) {
+      console.log('No videos matched the filter criteria.');
+      return;
+    }
+    console.log(`Found ${results.length} videos matching criteria:`);
+    results.forEach((video, idx) => {
+      const views = video.statistics?.viewCount || '0';
+      console.log(`${idx + 1}. ${video.videoId}: "${video.title}" (${video.privacyStatus}, ${views} views)`);
+    });
+  }
+
+  /**
+   * Display full results (optionally write to file)
+   */
+  public displayResults(filters: FilterRule[], results: FilterResult[], outputFile?: string, csvFile?: string): void {
+    // Print human-readable summary
+    this.printVideoSummary(results);
+    // Prepare JSON output
     const output = {
       filterCriteria: filters,
       totalVideos: results.length,
       videos: results
     };
+    // Write JSON to file if requested
+    if (outputFile) {
+      fs.writeJsonSync(outputFile, output, { spaces: 2 });
+      console.log(`\nJSON results saved to ${outputFile}`);
+    }
+    // Write CSV to file if requested
+    if (csvFile) {
+      const CSV_HEADER = 'videoId,title,description,privacyStatus,recordingDate,lastUpdated';
 
-    console.log(JSON.stringify(output, null, 2));
+      function toCsvRow(video: FilterResult): string {
+        // Escape double quotes and replace newlines for CSV safety
+        const escape = (val: string) => '"' + String(val ?? '').replace(/"/g, '""').replace(/\n/g, ' ') + '"';
+        return [
+          escape(video.videoId),
+          escape(video.title),
+          escape(video.description),
+          escape(video.privacyStatus),
+          escape(video.recordingDate ?? ''),
+          escape(video.lastUpdated ?? '')
+        ].join(',');
+      }
+      const csvRows = [CSV_HEADER, ...results.map(v => toCsvRow(v))];
+      fs.writeFileSync(csvFile, csvRows.join('\n'));
+      console.log(`CSV results saved to ${csvFile}`);
+    }
   }
 
   /**
@@ -683,6 +726,8 @@ async function main() {
   program.option('--preview', 'Preview mode (show count without processing)');
   program.option('--config <path>', 'Use configuration file');
   program.option('--verbose', 'Verbose output');
+  program.option('-o, --output <file>', 'Output file for JSON results');
+  program.option('--csv <file>', 'Output file for CSV results');
 
   program.parse();
 
@@ -791,7 +836,9 @@ async function main() {
       process.exit(1);
     }
 
-    await filter.filterFromArgs(filters, options.preview);
+    // Run filtering
+    const filteredVideos = filter.applyFilters(filter["videos"], filters).map(v => filter.convertToFilterResult(v, filters.map(f => f.type)));
+    filter.displayResults(filters, filteredVideos, options.output, options.csv);
   } catch (error) {
     console.error('Error:', error);
     process.exit(1);
