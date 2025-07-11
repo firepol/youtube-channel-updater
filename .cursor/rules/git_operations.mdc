@@ -1,5 +1,5 @@
 ---
-description: Load when making any code changes, implementing features, fixing bugs, or when user mentions git operations. CRITICAL: This rule must be loaded for ALL development work to ensure automatic commits after each change.
+description: Load when making any code or git history changes, implementing features, fixing bugs, or when user mentions git operations. CRITICAL: This rule must be loaded for ALL development work to ensure automatic commits after each change.
 globs: 
 alwaysApply: false
 ---
@@ -35,6 +35,18 @@ alwaysApply: false
   - Do not commit partial changes that are logically related
 - When working with dependencies:
   - Always check `git status` to ensure both `package.json` and lock files are included
+  - Verify that no unintended files are staged
+- When fixing issues or implementing features:
+  - Check `git status` to identify all affected files
+  - Include all related configuration, test, and documentation changes in the same commit
+
+## Amending Git History
+- When amending git history (e.g., fixing commit messages or squashing commits):
+  - **NEVER use interactive git commands** (such as `git commit --amend` without `--no-edit`, or any command that opens an editor or requires user input)
+  - **ALWAYS use non-interactive, scriptable commands**
+    - Preferred: `git reset --soft HEAD~N` to move N commits back to the staging area, then re-commit with the correct message(s)
+  - Ensure the workflow is fully automated and does not require user input
+
   - Verify that no unintended files are staged
 - When fixing issues or implementing features:
   - Check `git status` to identify all affected files
