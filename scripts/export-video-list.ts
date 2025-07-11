@@ -63,13 +63,14 @@ async function exportVideoList() {
     // Prepare CSV output
     const outputPath = path.join('data', 'video-list.csv');
     await fs.ensureDir(path.dirname(outputPath));
-    const csvHeader = 'videoId,title,privacyStatus\n';
-    await fs.writeFile(outputPath, csvHeader);
+    const csvHeader = 'videoId,title,privacyStatus,recordingDate,lastUpdated\n';
 
-    // Paginate through uploads playlist
+    // Paginate through uploads playlist and collect unique videos
     let pageToken: string | undefined = undefined;
     let totalFetched = 0;
     let page = 1;
+    const seenIds = new Set<string>();
+    const allVideos: any[] = [];
     do {
       logger.info(`Fetching page ${page}...`);
       const playlistResponse: any = await youtubeClient['youtube'].playlistItems.list({
@@ -85,20 +86,37 @@ async function exportVideoList() {
       const videoIds = items.map((item: any) => item.snippet?.resourceId?.videoId).filter(Boolean);
       // Fetch video details
       const videos = await youtubeClient.getVideoDetails(videoIds);
-      // Write to CSV
-      const csvRows = videos.map(v => {
-        // Escape quotes in title
-        const safeTitle = (v.snippet?.title || '').replace(/"/g, '""');
-        return `${v.id},"${safeTitle}",${v.status?.privacyStatus || ''}`;
-      });
-      await fs.appendFile(outputPath, csvRows.join('\n') + '\n');
+      for (const v of videos) {
+        if (!seenIds.has(v.id)) {
+          seenIds.add(v.id);
+          // Compute recordingDate and lastUpdated like in videos.json
+          const recordingDate = v.recordingDate || (v as any).recordingDetails?.recordingDate || '';
+          const lastUpdated = v.snippet?.publishedAt || '';
+          allVideos.push({
+            id: v.id,
+            title: v.snippet?.title || '',
+            privacyStatus: v.status?.privacyStatus || '',
+            recordingDate,
+            lastUpdated
+          });
+        }
+      }
       totalFetched += videos.length;
       logger.info(`Fetched ${videos.length} videos (total: ${totalFetched})`);
       pageToken = playlistResponse.data.nextPageToken;
       page++;
     } while (pageToken);
 
-    logger.success(`Exported ${totalFetched} videos to ${outputPath}`);
+    // Sort by lastUpdated descending (oldest to newest)
+    allVideos.sort((a, b) => new Date(a.lastUpdated).getTime() - new Date(b.lastUpdated).getTime());
+
+    // Write to CSV
+    const csvRows = allVideos.map(v => {
+      const safeTitle = v.title.replace(/"/g, '""');
+      return `${v.id},"${safeTitle}",${v.privacyStatus},${v.recordingDate || ''},${v.lastUpdated}`;
+    });
+    await fs.writeFile(outputPath, csvHeader + csvRows.join('\n') + '\n');
+    logger.success(`Exported ${allVideos.length} unique videos to ${outputPath}`);
   } catch (err) {
     getLogger().error('Failed to export video list', err as Error);
     process.exit(1);
