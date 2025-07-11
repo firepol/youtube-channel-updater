@@ -290,42 +290,77 @@ class VideoDatabaseBuilder {
 
       // If forceFullFetch, do a complete rebuild from scratch
       if (this.forceFullFetch) {
-        this.logger.info('Force full fetch mode: fetching all videos from uploads playlist...');
+        this.logger.info('Force full fetch mode: fetching all videos...');
         let allVideos: LocalVideo[] = [];
         let pageToken: string | undefined = undefined;
         let pageCount = 0;
         const maxResults = 50;
-        do {
-          pageCount++;
-          this.logger.info(`Fetching page ${pageCount}...`);
-          // Use OAuth for complete access (public, unlisted, private)
-          const playlistResponse: any = await this.youtubeClient['youtube'].playlistItems.list({
-            auth: this.youtubeClient['oauth2Client'],
-            part: ['snippet'],
-            playlistId: (await this.youtubeClient['youtube'].channels.list({
+        // Determine if we are fetching our own channel with OAuth
+        const isOwnChannel = this.useOAuth && (!this.targetChannelId || this.targetChannelId === this.config.youtube.channelId);
+        if (isOwnChannel) {
+          // Use search.list with forMine: true to fetch all videos, including drafts
+          this.logger.info('Using search.list with forMine: true to fetch all videos (including drafts) for own channel');
+          const seenIds = new Set<string>();
+          do {
+            pageCount++;
+            this.logger.info(`Fetching page ${pageCount}...`);
+            const searchResponse: any = await this.youtubeClient['youtube'].search.list({
               auth: this.youtubeClient['oauth2Client'],
-              part: ['contentDetails'],
-              mine: true
-            })).data.items[0].contentDetails.relatedPlaylists.uploads,
-            maxResults,
-            pageToken
-          });
-          const items = playlistResponse.data.items || [];
-          if (items.length === 0) break;
-          // Get video IDs
-          const videoIds = items.map((item: any) => item.snippet?.resourceId?.videoId).filter(Boolean);
-          // Fetch video details
-          const videos = await this.youtubeClient.getVideoDetails(videoIds);
-          // Convert to LocalVideo and accumulate
-          allVideos.push(...videos.map(v => this.convertToLocalVideo(v)));
-          this.logger.info(`Fetched ${videos.length} videos (total: ${allVideos.length})`);
-          pageToken = playlistResponse.data.nextPageToken;
-        } while (pageToken);
-        // Save all videos
-        await this.saveVideos(allVideos);
-        this.logger.success(`Video database build completed! Total videos: ${allVideos.length}`);
-        const withDates = allVideos.filter(v => v.datetime).length;
-        const withoutDates = allVideos.length - withDates;
+              part: ['id'],
+              forMine: true,
+              type: ['video'],
+              maxResults,
+              pageToken
+            });
+            const items = searchResponse.data.items || [];
+            if (items.length === 0) break;
+            const videoIds = items.map((item: any) => item.id?.videoId).filter(Boolean);
+            const videos = await this.youtubeClient.getVideoDetails(videoIds);
+            for (const v of videos) {
+              if (!seenIds.has(v.id)) {
+                seenIds.add(v.id);
+                allVideos.push(this.convertToLocalVideo(v));
+              }
+            }
+            this.logger.info(`Fetched ${videos.length} videos (total: ${allVideos.length})`);
+            pageToken = searchResponse.data.nextPageToken;
+          } while (pageToken);
+        } else {
+          // Use uploads playlist (works for public, unlisted, private, but not drafts)
+          this.logger.info('Using uploads playlist to fetch all published videos (public, unlisted, private)');
+          do {
+            pageCount++;
+            this.logger.info(`Fetching page ${pageCount}...`);
+            const playlistResponse: any = await this.youtubeClient['youtube'].playlistItems.list({
+              auth: this.useOAuth ? this.youtubeClient['oauth2Client'] : undefined,
+              key: !this.useOAuth ? this.youtubeClient['apiKey'] : undefined,
+              part: ['snippet'],
+              playlistId: (await this.youtubeClient['youtube'].channels.list({
+                auth: this.useOAuth ? this.youtubeClient['oauth2Client'] : undefined,
+                key: !this.useOAuth ? this.youtubeClient['apiKey'] : undefined,
+                part: ['contentDetails'],
+                id: this.targetChannelId,
+                mine: isOwnChannel ? true : undefined
+              })).data.items[0].contentDetails.relatedPlaylists.uploads,
+              maxResults,
+              pageToken
+            });
+            const items = playlistResponse.data.items || [];
+            if (items.length === 0) break;
+            const videoIds = items.map((item: any) => item.snippet?.resourceId?.videoId).filter(Boolean);
+            const videos = await this.youtubeClient.getVideoDetails(videoIds);
+            allVideos.push(...videos.map(v => this.convertToLocalVideo(v)));
+            this.logger.info(`Fetched ${videos.length} videos (total: ${allVideos.length})`);
+            pageToken = playlistResponse.data.nextPageToken;
+          } while (pageToken);
+        }
+        // Deduplicate by video ID
+        const uniqueVideos = Array.from(new Map(allVideos.map(v => [v.id, v])).values());
+        await this.saveVideos(uniqueVideos);
+        this.logger.info(`Deduplicated videos: ${uniqueVideos.length} unique out of ${allVideos.length} fetched`);
+        this.logger.success(`Video database build completed! Total videos: ${uniqueVideos.length}`);
+        const withDates = uniqueVideos.filter(v => v.datetime).length;
+        const withoutDates = uniqueVideos.length - withDates;
         this.logger.info(`Statistics: ${withDates} videos with dates, ${withoutDates} videos without dates`);
         return;
       }

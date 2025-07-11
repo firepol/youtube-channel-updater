@@ -117,6 +117,11 @@
   - **OAuth 2.0 required for fetching all videos** (public, unlisted, private)
 - **Rate Limits**: 10,000 units per day (free tier)
 
+### Technical Note: Fetching All Videos (Including Drafts)
+- For the authenticated user's own channel, the system uses the YouTube Data API v3 `search.list` endpoint with `forMine: true` and OAuth authentication. This allows fetching all videos, including drafts (unpublished/private videos), in addition to public, unlisted, and private videos.
+- For other channels, or when OAuth is not used, the system uses the uploads playlist (`playlistItems.list`), which only includes published videos (public, unlisted, private), but not drafts.
+- This ensures the local video database is as complete as possible for the channel owner, while maintaining compatibility for other channels.
+
 ### Authentication Requirements for Complete Video Access
 
 #### Video Visibility and API Access

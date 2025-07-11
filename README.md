@@ -200,6 +200,8 @@ npm run build:video-db clean
 
 **Note**: This is the foundation for all other operations. Run this first! For complete access to unlisted/private videos, use OAuth authentication.
 
+> **Note:** When using `--use-oauth` for your own channel, the script now fetches all videos (including drafts) using `search.list` with `forMine: true`. For other channels or without OAuth, it uses the uploads playlist (published videos only).
+
 ### 2a. Export Draft/Private Videos
 
 **Script**: `scripts/export-draft-videos.ts`

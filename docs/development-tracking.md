@@ -288,3 +288,8 @@
 - Use format: YYYY-MM-DD HH:MM:SS
 - Mark tasks as ✅ Complete, 🔄 In Progress, or ⏸️ Blocked
 - Update this file after each significant milestone
+
+## 2025-06-30  
+- 🔄 Updated `scripts/build-video-database.ts` to use `search.list` with `forMine: true` and OAuth for the authenticated user's own channel, allowing draft/unpublished videos to be included in the database.  
+- For other channels, or when OAuth is not used, the script continues to use the uploads playlist (published videos only).  
+- Improved documentation and comments in the script to clarify this logic.
