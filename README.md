@@ -200,6 +200,30 @@ npm run build:video-db clean
 
 **Note**: This is the foundation for all other operations. Run this first! For complete access to unlisted/private videos, use OAuth authentication.
 
+### 2a. Export Draft/Private Videos
+
+**Script**: `scripts/export-draft-videos.ts`
+
+Export a CSV of all videos from your channel—including private and draft videos—using the YouTube Data API v3 `search.list` endpoint with OAuth authentication.
+
+```bash
+# Run the script directly
+npx tsx scripts/export-draft-videos.ts
+```
+
+**What it does:**
+- Authenticates as the channel owner using OAuth
+- Uses the `search.list` endpoint with `forMine: true` to fetch all videos (public, unlisted, private, and drafts if available)
+- Fetches full details for each video
+- Deduplicates by video ID
+- Outputs a CSV: `data/draft-videos.csv` with columns:
+  - `videoId`, `title`, `privacyStatus`, `lastUpdated`
+- Logs the number of likely drafts (private videos with no lastUpdated)
+
+**Caveats:**
+- The YouTube API may not always return true "draft" (unpublished) videos, but this script maximizes the chance by using the most permissive endpoint and OAuth.
+- Useful for auditing which private/draft videos are present in your channel and not included in the main video database.
+
 ### 3. Playlist Discovery
 
 **Script**: `scripts/discover-playlists.ts`
