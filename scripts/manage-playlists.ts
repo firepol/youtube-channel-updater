@@ -683,6 +683,20 @@ class PlaylistManager {
           continue;
         }
 
+        // === Prevent duplicate playlist entries ===
+        const alreadyInPlaylist = playlistCache.items.some(item => item.videoId === video.id);
+        if (alreadyInPlaylist) {
+          assignment.assignedPlaylists.push({
+            playlistId: playlist.id,
+            playlistTitle: playlist.title,
+            position: 0,
+            status: 'skipped',
+            error: 'Video already in playlist'
+          });
+          continue;
+        }
+        // === End duplicate check ===
+
         // Calculate position
         const position = this.calculator.calculatePosition(
           video.recordingDate || video.publishedAt,
@@ -692,8 +706,15 @@ class PlaylistManager {
         // Add to playlist
         const result = await this.addVideoToPlaylist(video.id, playlist.id, position, options);
         
-        if (result.success && !options.dryRun) {
-          // Update local cache
+        // === Rate limit error handling ===
+        if (result.error && typeof result.error === 'string' && (result.error.toLowerCase().includes('rate limit') || result.error.toLowerCase().includes('quota'))) {
+          getLogger().error(`Rate limit or quota error detected: ${result.error}`);
+          process.exit(1);
+        }
+        // === End rate limit error handling ===
+
+        // Always update local cache after successful add (even in dryRun for consistency)
+        if (result.success) {
           await this.updatePlaylistCache(playlist.id, video.id, position, video.title);
         }
 
@@ -707,6 +728,12 @@ class PlaylistManager {
 
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        // === Rate limit error handling in catch ===
+        if (typeof errorMessage === 'string' && (errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('quota'))) {
+          getLogger().error(`Rate limit or quota error detected: ${errorMessage}`);
+          process.exit(1);
+        }
+        // === End rate limit error handling ===
         assignment.assignedPlaylists.push({
           playlistId: playlist.id,
           playlistTitle: playlist.title,
@@ -1034,4 +1061,4 @@ if (require.main === module) {
     getLogger().error('Unhandled error', error as Error);
     process.exit(1);
   });
-} 
+}
