@@ -51,7 +51,9 @@ interface ProcessingOptions {
   publishedAfter?: string | undefined; // Direct date filter
   publishedBefore?: string | undefined; // Direct date filter
   titleContains?: string | undefined; // Direct title filter
+  titleNotContains?: string | undefined; // Direct title not contains filter
   descriptionContains?: string | undefined; // Direct description filter
+  descriptionNotContains?: string | undefined; // Direct description not contains filter
   minViews?: number | undefined; // Direct views filter
   maxViews?: number | undefined; // Direct views filter
 }
@@ -877,7 +879,9 @@ async function main(): Promise<void> {
     .option('--published-after <date>', 'Direct date filter')
     .option('--published-before <date>', 'Direct date filter')
     .option('--title-contains <text>', 'Direct title filter')
+    .option('--title-not-contains <text>', 'Direct title not contains filter')
     .option('--description-contains <text>', 'Direct description filter')
+    .option('--description-not-contains <text>', 'Direct description not contains filter')
     .option('--min-views <number>', 'Direct views filter')
     .option('--max-views <number>', 'Direct views filter')
     .option('-h, --help', 'Show help information')
@@ -896,7 +900,9 @@ async function main(): Promise<void> {
     publishedAfter: program.opts().publishedAfter,
     publishedBefore: program.opts().publishedBefore,
     titleContains: program.opts().titleContains,
+    titleNotContains: program.opts().titleNotContains,
     descriptionContains: program.opts().descriptionContains,
+    descriptionNotContains: program.opts().descriptionNotContains,
     minViews: program.opts().minViews ? Number(program.opts().minViews) : undefined,
     maxViews: program.opts().maxViews ? Number(program.opts().maxViews) : undefined
   };
@@ -964,7 +970,8 @@ async function main(): Promise<void> {
       }
       videos = await fs.readJson(options.input) as LocalVideo[];
     } else if (options.filterConfig || options.privacyStatus || options.publishedAfter || 
-               options.publishedBefore || options.titleContains || options.descriptionContains || 
+               options.publishedBefore || options.titleContains || options.titleNotContains || 
+               options.descriptionContains || options.descriptionNotContains || 
                options.minViews !== undefined || options.maxViews !== undefined) {
       // Filter videos directly from channel database
       getLogger().info('Filtering videos directly from channel database...');
@@ -997,7 +1004,9 @@ async function main(): Promise<void> {
         addFilter('published_after', options.publishedAfter);
         addFilter('published_before', options.publishedBefore);
         addFilter('title_contains', options.titleContains);
+        addFilter('title_not_contains', options.titleNotContains);
         addFilter('description_contains', options.descriptionContains);
+        addFilter('description_not_contains', options.descriptionNotContains);
         addFilter('min_views', options.minViews);
         addFilter('max_views', options.maxViews);
         
@@ -1011,9 +1020,13 @@ async function main(): Promise<void> {
       
       getLogger().info(`Found ${videos.length} videos matching filter criteria`);
     } else {
-      getLogger().error('Either --input, --video-id, --filter-config, or direct filter options must be specified');
-      getLogger().error('Use --help for available filtering options');
-      process.exit(1);
+      // Default: use data/videos.json if no input or filters specified
+      if (!await fs.pathExists('data/videos.json')) {
+        getLogger().error('Video database not found at data/videos.json');
+        process.exit(1);
+      }
+      videos = await fs.readJson('data/videos.json') as LocalVideo[];
+      getLogger().info(`Loaded ${videos.length} videos from data/videos.json`);
     }
 
     if (videos.length === 0) {
