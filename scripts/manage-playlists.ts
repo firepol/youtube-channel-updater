@@ -530,78 +530,79 @@ class PlaylistManager {
     const configValidation = this.validateConfiguration();
     const dbValidation = await this.validateVideoDatabase(videos);
     const authValidation = this.validateAuthentication();
-    const quotaEstimate = this.estimateApiQuota(videos);
+
+    // === NEW: Check local playlist JSONs for actual assignments needed ===
+    let totalAssignments = 0;
+    let quotaUnitsRequired = 0;
+    let assignmentsToMake = 0;
+    const preview = [];
+    for (const video of videos) {
+      const matchingPlaylists = this.matcher.getMatchingPlaylists(video.title, this.playlistConfig.playlists);
+      const proposedPlaylists = [];
+      const newPlaylists: string[] = [];
+      let playlistsChanged = false;
+      for (const playlist of matchingPlaylists) {
+        // Load local playlist cache
+        let playlistCache = await this.loadPlaylistCache(playlist.id);
+        if (!playlistCache) {
+          playlistCache = { id: playlist.id, title: playlist.title, description: '', privacyStatus: '', itemCount: 0, items: [] };
+        }
+        const alreadyInPlaylist = playlistCache.items.some(item => item.videoId === video.id);
+        if (!alreadyInPlaylist) {
+          assignmentsToMake++;
+          quotaUnitsRequired += 50;
+          proposedPlaylists.push({
+            playlistId: playlist.id,
+            playlistTitle: playlist.title,
+            position: 0 // Position calculation not needed for dry-run preview
+          });
+          newPlaylists.push(playlist.title);
+          playlistsChanged = true;
+        }
+      }
+      preview.push({
+        videoId: video.id,
+        title: video.title,
+        currentState: { playlists: [] },
+        proposedState: { playlists: proposedPlaylists },
+        changes: {
+          playlistsChanged,
+          newPlaylists,
+          removedPlaylists: []
+        },
+        validation: {
+          positionValid: true,
+          playlistValid: matchingPlaylists.length > 0,
+          warnings: matchingPlaylists.length === 0 ? ['No matching playlists found'] : [],
+          errors: []
+        }
+      });
+    }
+    totalAssignments = assignmentsToMake;
+    const dailyQuotaImpact = (quotaUnitsRequired / 10000) * 100;
+    const processingTime = `${Math.floor((Date.now() - startTime) / 60000)}:${Math.floor(((Date.now() - startTime) % 60000) / 1000).toString().padStart(2, '0')}`;
 
     // Combine validation results
     const allWarnings = [
       ...configValidation.warnings,
       ...dbValidation.warnings,
       ...authValidation.warnings,
-      ...quotaEstimate.warnings
+      ...(dailyQuotaImpact > 80 ? [`High quota usage: ${dailyQuotaImpact.toFixed(1)}% of daily limit`] : [])
     ];
     const allErrors = [
       ...configValidation.errors,
       ...dbValidation.errors,
       ...authValidation.errors
     ];
-
     const validationStatus = allErrors.length > 0 ? 'errors' : allWarnings.length > 0 ? 'warnings' : 'valid';
-
-    // Generate preview for each video
-    const preview = videos.map(video => {
-      const matchingPlaylists = this.matcher.getMatchingPlaylists(video.title, this.playlistConfig.playlists);
-      
-      // Calculate positions for each matching playlist
-      const proposedPlaylists = matchingPlaylists.map(playlist => ({
-        playlistId: playlist.id,
-        playlistTitle: playlist.title,
-        position: 0 // Will be calculated when playlist cache is loaded
-      }));
-
-      // Validate playlist assignments
-      const positionValid = true; // Will be validated when cache is loaded
-      const playlistValid = matchingPlaylists.length > 0;
-
-      const videoWarnings: string[] = [];
-      const videoErrors: string[] = [];
-
-      if (matchingPlaylists.length === 0) {
-        videoWarnings.push('No matching playlists found');
-      }
-
-      return {
-        videoId: video.id,
-        title: video.title,
-        currentState: {
-          playlists: [] // We don't track current playlist assignments in dry-run
-        },
-        proposedState: {
-          playlists: proposedPlaylists
-        },
-        changes: {
-          playlistsChanged: matchingPlaylists.length > 0,
-          newPlaylists: matchingPlaylists.map(p => p.title),
-          removedPlaylists: []
-        },
-        validation: {
-          positionValid,
-          playlistValid,
-          warnings: videoWarnings,
-          errors: videoErrors
-        }
-      };
-    });
-
-    const endTime = Date.now();
-    const processingTime = `${Math.floor((endTime - startTime) / 60000)}:${Math.floor(((endTime - startTime) % 60000) / 1000).toString().padStart(2, '0')}`;
 
     return {
       mode: 'dry-run',
       timestamp: new Date().toISOString(),
       summary: {
         videosToProcess: videos.length,
-        estimatedApiQuota: quotaEstimate.quotaUnitsRequired,
-        playlistAssignments: quotaEstimate.apiCallsRequired,
+        estimatedApiQuota: quotaUnitsRequired,
+        playlistAssignments: totalAssignments,
         processingTime,
         validationStatus
       },
@@ -610,29 +611,29 @@ class PlaylistManager {
           status: 'completed',
           configValid: configValidation.valid,
           dataIntegrity: dbValidation.valid,
-          apiQuotaAvailable: quotaEstimate.dailyQuotaImpact < 100,
+          apiQuotaAvailable: dailyQuotaImpact < 100,
           authenticationValid: authValidation.valid
         },
         playlistMatching: {
           status: 'completed',
           playlistsToUpdate: this.playlistConfig.playlists.length,
-          assignmentsToMake: quotaEstimate.apiCallsRequired
+          assignmentsToMake: totalAssignments
         }
       },
       preview,
       validation: {
         configValid: configValidation.valid,
         dataIntegrity: dbValidation.valid,
-        apiQuotaAvailable: quotaEstimate.dailyQuotaImpact < 100,
+        apiQuotaAvailable: dailyQuotaImpact < 100,
         authenticationValid: authValidation.valid,
         warnings: allWarnings,
         errors: allErrors
       },
       costEstimate: {
-        totalApiCalls: quotaEstimate.apiCallsRequired,
-        quotaUnitsRequired: quotaEstimate.quotaUnitsRequired,
-        dailyQuotaImpact: quotaEstimate.dailyQuotaImpact,
-        processingTimeEstimate: quotaEstimate.processingTimeEstimate,
+        totalApiCalls: totalAssignments,
+        quotaUnitsRequired,
+        dailyQuotaImpact,
+        processingTimeEstimate: processingTime,
         resourceRequirements: {
           memory: '~30MB',
           storage: '~1MB'
@@ -767,7 +768,6 @@ class PlaylistManager {
     if (options.dryRun) {
       result.dryRunMode = true;
       result.previewReport = await this.generateDryRunPreview(videos);
-      
       // Display preview summary
       const preview = result.previewReport;
       getLogger().info('=== DRY RUN PREVIEW ===');
@@ -776,17 +776,14 @@ class PlaylistManager {
       getLogger().info(`Playlist assignments: ${preview.summary.playlistAssignments}`);
       getLogger().info(`Processing time: ${preview.summary.processingTime}`);
       getLogger().info(`Validation status: ${preview.summary.validationStatus}`);
-      
       if (preview.validation.errors.length > 0) {
         getLogger().error('Validation errors:');
         preview.validation.errors.forEach(error => getLogger().error(`  - ${error}`));
       }
-      
       if (preview.validation.warnings.length > 0) {
         getLogger().warning('Validation warnings:');
         preview.validation.warnings.forEach(warning => getLogger().warning(`  - ${warning}`));
       }
-      
       // Show sample preview (first 3 videos)
       const sampleVideos = preview.preview.slice(0, 3);
       getLogger().info('Sample preview:');
@@ -798,50 +795,68 @@ class PlaylistManager {
           getLogger().info(`  No matching playlists found`);
         }
       }
-      
       if (preview.preview.length > 3) {
         getLogger().info(`... and ${preview.preview.length - 3} more videos`);
       }
-      
       getLogger().info('=== END DRY RUN PREVIEW ===');
-      
       // Save preview report if output file specified
       if (options.output) {
         await fs.writeJson(options.output, preview, { spaces: 2 });
         getLogger().info(`Dry-run report saved to ${options.output}`);
       }
-      
       return result;
     }
 
     const assignments: PlaylistAssignment[] = [];
-    
     let totalAssignments = 0;
     let successfulAssignments = 0;
     let failedAssignments = 0;
+    let errorOccurred = false;
+    let errorMessage = '';
 
-    for (let i = 0; i < videos.length; i++) {
-      const video = videos[i];
-      console.log(`Processing video ${i + 1}/${videos.length}: ${video.title}`);
-      
-      const assignment = await this.processVideo(video, options);
-      assignments.push(assignment);
-      
-      // Count assignments
-      for (const playlistAssignment of assignment.assignedPlaylists) {
-        totalAssignments++;
-        if (playlistAssignment.status === 'success') {
-          successfulAssignments++;
-        } else {
-          failedAssignments++;
+    try {
+      for (let i = 0; i < videos.length; i++) {
+        const video = videos[i];
+        console.log(`Processing video ${i + 1}/${videos.length}: ${video.title}`);
+        const assignment = await this.processVideo(video, options);
+        assignments.push(assignment);
+        // Count assignments
+        for (const playlistAssignment of assignment.assignedPlaylists) {
+          totalAssignments++;
+          if (playlistAssignment.status === 'success') {
+            successfulAssignments++;
+          } else if (playlistAssignment.status === 'failed') {
+            failedAssignments++;
+            // If quota/rate limit error, set flag and break
+            if (playlistAssignment.error && playlistAssignment.error.toLowerCase().includes('quota')) {
+              errorOccurred = true;
+              errorMessage = playlistAssignment.error;
+              break;
+            }
+          }
         }
+        if (errorOccurred) break;
+      }
+    } finally {
+      // Always save results to file if not dry-run
+      if (!options.dryRun && options.output) {
+        const processingTime = this.formatDuration(Date.now() - startTime);
+        const resultToSave: ProcessingResult = {
+          processedVideos: assignments.length,
+          playlistAssignments: assignments,
+          totalAssignments,
+          successfulAssignments,
+          failedAssignments,
+          processingTime
+        };
+        await fs.writeJson(options.output, resultToSave, { spaces: 2 });
+        getLogger().info(`Results saved to ${options.output}`);
       }
     }
 
     const processingTime = this.formatDuration(Date.now() - startTime);
-
     return {
-      processedVideos: videos.length,
+      processedVideos: assignments.length,
       playlistAssignments: assignments,
       totalAssignments,
       successfulAssignments,
