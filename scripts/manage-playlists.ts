@@ -14,6 +14,7 @@ import { YouTubeClient } from '../src/api/youtube-client';
 import { loadConfig } from '../src/config/config-loader';
 import { getLogger, logVerbose, initializeLogger } from '../src/utils/logger';
 import { VideoFilter, FilterRule } from './filter-videos';
+import { sanitizePlaylistName } from '../src/utils/playlist';
 
 interface PlaylistAssignment {
   videoId: string;
@@ -282,14 +283,16 @@ class PlaylistManager {
   /**
    * Load playlist cache from local file
    */
-  private async loadPlaylistCache(playlistId: string): Promise<LocalPlaylist | null> {
+  private async loadPlaylistCache(playlistId: string, playlistTitle?: string): Promise<LocalPlaylist | null> {
     try {
-      const cacheFile = path.join(this.playlistsDir, `${playlistId}.json`);
+      // Use sanitized title for filename
+      const sanitizedName = sanitizePlaylistName(playlistTitle);
+      const cacheFile = path.join(this.playlistsDir, `${sanitizedName}.json`);
       if (await fs.pathExists(cacheFile)) {
         return await fs.readJson(cacheFile) as LocalPlaylist;
       }
     } catch (error) {
-      logVerbose(`Failed to load playlist cache for ${playlistId}: ${error}`);
+      logVerbose(`Failed to load playlist cache for ${playlistTitle}: ${error}`);
     }
     return null;
   }
@@ -345,7 +348,7 @@ class PlaylistManager {
   private async savePlaylistCache(playlistId: string, playlist: LocalPlaylist): Promise<void> {
     try {
       await fs.ensureDir(this.playlistsDir);
-      const cacheFile = path.join(this.playlistsDir, `${playlistId}.json`);
+      const cacheFile = path.join(this.playlistsDir, `${sanitizePlaylistName(playlist.title)}.json`);
       await fs.writeJson(cacheFile, playlist, { spaces: 2 });
     } catch (error) {
       logVerbose(`Failed to save playlist cache for ${playlistId}: ${error}`);
@@ -543,7 +546,7 @@ class PlaylistManager {
       let playlistsChanged = false;
       for (const playlist of matchingPlaylists) {
         // Load local playlist cache
-        let playlistCache = await this.loadPlaylistCache(playlist.id);
+        let playlistCache = await this.loadPlaylistCache(playlist.id, playlist.title);
         if (!playlistCache) {
           playlistCache = { id: playlist.id, title: playlist.title, description: '', privacyStatus: '', itemCount: 0, items: [] };
         }
@@ -669,7 +672,7 @@ class PlaylistManager {
     for (const playlist of matchingPlaylists) {
       try {
         // Load or refresh playlist cache
-        let playlistCache = await this.loadPlaylistCache(playlist.id);
+        let playlistCache = await this.loadPlaylistCache(playlist.id, playlist.title);
         
         if (!playlistCache || options.refreshCache) {
           playlistCache = await this.refreshPlaylistCache(playlist.id);

@@ -6,6 +6,7 @@ import { YouTubeClient } from '../src/api/youtube-client';
 import { ConfigLoader } from '../src/config/config-loader';
 import { initializeLogger, LogLevel } from '../src/utils/logger';
 import { YouTubePlaylist, PlaylistConfig, PlaylistRule } from '../src/types/api-types';
+import { sanitizePlaylistName } from '../src/utils/playlist';
 
 class PlaylistDiscoverer {
   private youtubeClient!: YouTubeClient;
@@ -104,7 +105,7 @@ class PlaylistDiscoverer {
    * Create empty JSON file for playlist
    */
   private async createPlaylistFile(playlist: YouTubePlaylist): Promise<void> {
-    const sanitizedName = this.sanitizePlaylistName(playlist.title);
+    const sanitizedName = sanitizePlaylistName(playlist.title);
     const filePath = path.join(this.playlistsDir, `${sanitizedName}.json`);
     
     const playlistData = {
@@ -313,56 +314,5 @@ class PlaylistDiscoverer {
       // List discovered playlists
       this.logger.info('Discovered playlists:');
       for (const playlist of allPlaylists) {
-        const sanitizedName = this.sanitizePlaylistName(playlist.title);
-        this.logger.info(`  - ${playlist.title || 'Untitled Playlist'} (${playlist.itemCount || 0} items) -> ${sanitizedName}.json`);
-      }
-
-    } catch (error) {
-      this.logger.error('Failed to discover playlists', error as Error);
-      throw error;
-    }
-  }
-
-  /**
-   * Clean up playlist files
-   */
-  async clean(): Promise<void> {
-    try {
-      await fs.emptyDir(this.playlistsDir);
-      this.logger.success('Cleaned up playlist files');
-    } catch (error) {
-      this.logger.error('Failed to clean up playlist files', error as Error);
-    }
-  }
-}
-
-// Main execution
-async function main() {
-  const discoverer = new PlaylistDiscoverer();
-  
-  try {
-    await discoverer.initialize();
-
-    const args = process.argv.slice(2);
-    const command = args[0];
-
-    switch (command) {
-      case 'clean':
-        await discoverer.clean();
-        break;
-      case 'discover':
-      default:
-        await discoverer.discoverPlaylists();
-        break;
-    }
-
-  } catch (error) {
-    console.error('Playlist discovery failed:', error);
-    process.exit(1);
-  }
-}
-
-// Run if called directly
-if (require.main === module) {
-  main();
-} 
+        const sanitizedName = sanitizePlaylistName(playlist.title);
+        this.logger.info(`
