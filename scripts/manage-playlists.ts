@@ -534,24 +534,37 @@ class PlaylistManager {
     const dbValidation = await this.validateVideoDatabase(videos);
     const authValidation = this.validateAuthentication();
 
-    // === NEW: Check local playlist JSONs for actual assignments needed ===
+    // === NEW: Scan all playlist JSONs for currentState and accurate proposedState ===
+    // Build a map of playlist title to playlist data
+    const playlistFiles = await fs.readdir(this.playlistsDir);
+    const playlistMap: Record<string, LocalPlaylist> = {};
+    for (const file of playlistFiles) {
+      if (file.endsWith('.json')) {
+        const playlist = await fs.readJson(path.join(this.playlistsDir, file)) as LocalPlaylist;
+        playlistMap[playlist.title] = playlist;
+      }
+    }
+
     let totalAssignments = 0;
     let quotaUnitsRequired = 0;
     let assignmentsToMake = 0;
     const preview = [];
     for (const video of videos) {
+      // Find all playlists the video is already in
+      const currentPlaylists: string[] = [];
+      for (const [title, playlist] of Object.entries(playlistMap)) {
+        if (playlist.items.some(item => item.videoId === video.id)) {
+          currentPlaylists.push(title);
+        }
+      }
+      // Use matcher to determine which playlists the video should be in
       const matchingPlaylists = this.matcher.getMatchingPlaylists(video.title, this.playlistConfig.playlists);
       const proposedPlaylists = [];
       const newPlaylists: string[] = [];
       let playlistsChanged = false;
       for (const playlist of matchingPlaylists) {
-        // Load local playlist cache
-        let playlistCache = await this.loadPlaylistCache(playlist.id, playlist.title);
-        if (!playlistCache) {
-          playlistCache = { id: playlist.id, title: playlist.title, description: '', privacyStatus: '', itemCount: 0, items: [] };
-        }
-        const alreadyInPlaylist = playlistCache.items.some(item => item.videoId === video.id);
-        if (!alreadyInPlaylist) {
+        // If not already present, propose to add
+        if (!currentPlaylists.includes(playlist.title)) {
           assignmentsToMake++;
           quotaUnitsRequired += 50;
           proposedPlaylists.push({
@@ -566,7 +579,7 @@ class PlaylistManager {
       preview.push({
         videoId: video.id,
         title: video.title,
-        currentState: { playlists: [] },
+        currentState: { playlists: currentPlaylists },
         proposedState: { playlists: proposedPlaylists },
         changes: {
           playlistsChanged,
