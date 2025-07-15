@@ -309,6 +309,16 @@ export interface VideoProcessingConfig {
     publicStatsViewable?: boolean;
   };
   recordingDateExtractPattern: string;
+  // --- Added for privacy rules ---
+  privacyRules?: {
+    videoTitleKeywords?: {
+      [privacy: string]: string[];
+    };
+    defaultVideoPrivacy?: {
+      publish: string;
+      draft: string;
+    };
+  };
 }
 
 // Error Types

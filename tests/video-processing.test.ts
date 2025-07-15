@@ -389,3 +389,68 @@ describe('Alternative Named Group Patterns', () => {
     expect(result).toBe(originalTitle);
   });
 }); 
+
+describe('Privacy Logic', () => {
+  let processor: VideoProcessor;
+  const privacyConfig = {
+    ...mockConfig,
+    privacyRules: {
+      videoTitleKeywords: {
+        unlisted: ['unlisted', 'microphone'],
+        private: ['private', 'secret']
+      },
+      defaultVideoPrivacy: {
+        publish: 'public',
+        draft: 'unlisted'
+      }
+    }
+  };
+
+  beforeEach(() => {
+    processor = new VideoProcessor(mockYouTubeClient as any, privacyConfig as any);
+  });
+
+  it('should use per-video privacyOverride if present', () => {
+    const video = { title: 'any', privacyStatus: 'public', privacyOverride: 'private' } as any;
+    expect(processor['determinePrivacy'](video, true)).toBe('private');
+    expect(processor['determinePrivacy'](video, false)).toBe('private');
+  });
+
+  it('should match private keyword in title', () => {
+    const video = { title: 'This is a secret video', privacyStatus: 'public' } as any;
+    expect(processor['determinePrivacy'](video, true)).toBe('private');
+  });
+
+  it('should match unlisted keyword in title', () => {
+    const video = { title: 'Microphone test', privacyStatus: 'public' } as any;
+    expect(processor['determinePrivacy'](video, true)).toBe('unlisted');
+  });
+
+  it('should use default publish privacy if no keyword', () => {
+    const video = { title: 'Normal video', privacyStatus: 'private' } as any;
+    expect(processor['determinePrivacy'](video, true)).toBe('public');
+  });
+
+  it('should keep current privacy if not publishing and no keyword/override', () => {
+    const video = { title: 'Normal video', privacyStatus: 'public' } as any;
+    expect(processor['determinePrivacy'](video, false)).toBe('public');
+    const video2 = { title: 'Normal video', privacyStatus: 'unlisted' } as any;
+    expect(processor['determinePrivacy'](video2, false)).toBe('unlisted');
+  });
+
+  it('should downgrade public to unlisted if keyword matches', () => {
+    const video = { title: 'Microphone test', privacyStatus: 'public' } as any;
+    // Simulate publish, but keyword forces unlisted
+    expect(processor['determinePrivacy'](video, true)).toBe('unlisted');
+  });
+
+  it('should downgrade public to private if keyword matches', () => {
+    const video = { title: 'This is a secret video', privacyStatus: 'public' } as any;
+    expect(processor['determinePrivacy'](video, true)).toBe('private');
+  });
+
+  it('should prefer private over unlisted if both keywords match', () => {
+    const video = { title: 'This is a secret unlisted microphone video', privacyStatus: 'public' } as any;
+    expect(processor['determinePrivacy'](video, true)).toBe('private');
+  });
+}); 

@@ -715,16 +715,65 @@ class VideoProcessor {
   }
 
   /**
+   * Determine the desired privacy for a video based on override, title keywords, or default.
+   */
+  private determinePrivacy(video: LocalVideo, isPublish: boolean): string {
+    // 1. Per-video override (if present)
+    if ((video as any).privacyOverride && typeof (video as any).privacyOverride === 'string') {
+      return (video as any).privacyOverride;
+    }
+    // 2. Title keywords (from config)
+    const privacyRules = this.config.privacyRules || {};
+    const title = video.title.toLowerCase();
+    let matchedPrivacy: string | undefined;
+    if (privacyRules.videoTitleKeywords) {
+      // Most restrictive wins: private > unlisted > public
+      if (privacyRules.videoTitleKeywords.private) {
+        for (const kw of privacyRules.videoTitleKeywords.private) {
+          if (title.includes(kw.toLowerCase())) {
+            matchedPrivacy = 'private';
+            break;
+          }
+        }
+      }
+      if (!matchedPrivacy && privacyRules.videoTitleKeywords.unlisted) {
+        for (const kw of privacyRules.videoTitleKeywords.unlisted) {
+          if (title.includes(kw.toLowerCase())) {
+            matchedPrivacy = 'unlisted';
+            break;
+          }
+        }
+      }
+    }
+    if (matchedPrivacy) return matchedPrivacy;
+    // 3. Default privacy (from config)
+    if (isPublish) {
+      if (privacyRules.defaultVideoPrivacy) {
+        return privacyRules.defaultVideoPrivacy.publish;
+      }
+      return 'public';
+    }
+    // If not publishing and no keyword/override, keep current privacy
+    return video.privacyStatus;
+  }
+
+  /**
    * Process a single video
    */
   private async processVideo(video: LocalVideo, options: ProcessingOptions & { publish?: boolean }): Promise<boolean> {
     try {
-      // Check if video needs processing or publishing
       const isPublish = !!options.publish;
-      const shouldPublish = isPublish && video.privacyStatus !== 'public';
+      // --- Determine desired privacy ---
+      const desiredPrivacy = this.determinePrivacy(video, isPublish);
+      const currentPrivacy = video.privacyStatus;
+      const needsPrivacyChange = currentPrivacy !== desiredPrivacy;
+      // --- End privacy logic ---
+
+      // Check if video needs processing or publishing
+      const shouldPublish = isPublish && desiredPrivacy === 'public' && currentPrivacy !== 'public';
       const needsTransform = !isPublish && (!options.force && !this.needsProcessing(video)) === false;
-      if (!shouldPublish && !needsTransform) {
-        logVerbose(`Skipping video ${video.id} - already processed and public`);
+      if (!shouldPublish && !needsTransform && !needsPrivacyChange) {
+        logVerbose(`Skipping video ${video.id} - already processed and privacy up to date`);
         return true;
       }
 
@@ -743,7 +792,7 @@ class VideoProcessor {
       let newDescription = video.description;
       let newTags = video.tags || [];
       let updateMetadata = false;
-      if (!isPublish || (isPublish && (options.force || this.needsProcessing(video)))) {
+      if (!isPublish || (isPublish && (options.force || this.needsProcessing(video))) || needsPrivacyChange) {
         newTitle = this.transformTitle(video.title, recordingDate);
         newDescription = this.transformDescription(video.description, video.title, recordingDate);
         newTags = this.generateTags(video.title);
@@ -781,9 +830,13 @@ class VideoProcessor {
         publicStatsViewable: typeof this.config.videoSettings?.publicStatsViewable === 'boolean' ? this.config.videoSettings.publicStatsViewable : true,
         shortsRemixing: (typeof this.config.videoSettings?.allowRemixing === 'boolean' ? (this.config.videoSettings.allowRemixing ? 'allow' : 'disallow') : 'allow')
       };
-      if (shouldPublish) {
+      // --- Set privacy status ---
+      if (needsPrivacyChange) {
+        videoSettings.privacyStatus = desiredPrivacy;
+        getLogger().info(`Privacy for video ${video.id} will be changed: ${currentPrivacy} -> ${desiredPrivacy}`);
+      } else if (shouldPublish) {
         videoSettings.privacyStatus = 'public';
-        videoSettings.madeForKids = false;
+        getLogger().info(`Publishing video ${video.id} (privacyStatus set to public)`);
       } else if (currentStatus?.madeForKids !== false) {
         videoSettings.madeForKids = false;
       }
@@ -796,7 +849,9 @@ class VideoProcessor {
 
       if (options.dryRun) {
         getLogger().info(`[DRY RUN] Would update video ${video.id}:`);
-        if (shouldPublish) {
+        if (needsPrivacyChange) {
+          getLogger().info(`  Would change privacy (privacyStatus: ${currentPrivacy} -> ${desiredPrivacy})`);
+        } else if (shouldPublish) {
           getLogger().info(`  Would publish video (privacyStatus: ${video.privacyStatus} -> public)`);
         }
         if (updateMetadata) {
@@ -815,8 +870,8 @@ class VideoProcessor {
         );
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        if (shouldPublish && errorMessage.includes('Post-update check failed')) {
-          getLogger().error(`Publish verification failed for video ${video.id}: ${errorMessage}`);
+        if ((shouldPublish || needsPrivacyChange) && errorMessage.includes('Post-update check failed')) {
+          getLogger().error(`Publish/Privacy verification failed for video ${video.id}: ${errorMessage}`);
           return false;
         }
         if (errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('quota')) {
@@ -837,7 +892,7 @@ class VideoProcessor {
         madeForKids: false,
         license: 'creativeCommon',
         categoryId: '20',
-        privacyStatus: shouldPublish ? 'public' : video.privacyStatus,
+        privacyStatus: videoSettings.privacyStatus || video.privacyStatus,
         lastUpdated: new Date().toISOString()
       };
       await this.updateLocalDatabase(video.id, updatedLocalVideo);
@@ -859,7 +914,9 @@ class VideoProcessor {
           newValue: newDescription
         });
       }
-      if (shouldPublish) {
+      if (needsPrivacyChange) {
+        getLogger().info(`Privacy updated for video ${video.id} (privacyStatus set to ${desiredPrivacy})`);
+      } else if (shouldPublish) {
         getLogger().info(`Published video ${video.id} (privacyStatus set to public)`);
       } else if (updateMetadata) {
         getLogger().info(`Updated metadata for video ${video.id}`);
