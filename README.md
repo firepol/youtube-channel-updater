@@ -234,19 +234,28 @@ Discover all playlists from your YouTube channel and generate configuration temp
 
 ```bash
 # Using npm script (recommended)
-npm run discover-playlists [command]
+npm run discover-playlists [command] [options]
 
 # Or using tsx directly
-npx tsx scripts/discover-playlists.ts [command]
+npx tsx scripts/discover-playlists.ts [command] [options]
 ```
 
 **Commands**:
 - `discover` (default) - Discover all playlists
 - `clean` - Clean up playlist files
 
+**Options**:
+- `--fetch-items` - Fetch all items (videos) for each playlist and populate playlist JSON files
+
 **Examples**:
-- `npm run discover-playlists` - Discover playlists
+- `npm run discover-playlists` - Discover playlists (metadata only)
+- `npm run discover-playlists -- --fetch-items` - Discover playlists and fetch all video items for each playlist
 - `npm run discover-playlists clean` - Clean up files
+
+**What does `--fetch-items` do?**
+- When you use `--fetch-items`, the script will fetch all videos (items) for each playlist from YouTube and populate the `items` array in each playlist JSON file under `data/playlists/`.
+- This is useful for keeping your local playlist files in sync with the actual contents of your YouTube playlists.
+- If you do not use this option, only playlist metadata (id, title, description, etc.) will be saved, and the `items` array will be empty.
 
 **Output**:
 - Creates `config/playlists.json` template
