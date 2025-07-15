@@ -80,7 +80,15 @@ const VideoProcessingConfigSchema = z.object({
     categoryId: z.string().default('20'), // Gaming category
     allowRemixing: z.boolean().default(true)
   }),
-  recordingDateExtractPattern: z.string().optional()
+  recordingDateExtractPattern: z.string().optional(),
+  // --- Add privacyRules ---
+  privacyRules: z.object({
+    videoTitleKeywords: z.record(z.string(), z.array(z.string())).optional(),
+    defaultVideoPrivacy: z.object({
+      publish: z.string(),
+      draft: z.string()
+    }).optional()
+  }).optional()
 });
 
 // Configuration types
