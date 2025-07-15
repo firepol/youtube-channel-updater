@@ -409,6 +409,22 @@ class PlaylistManager {
   }
 
   /**
+   * Check if a video can be added to a playlist based on privacy rules
+   */
+  private canAddVideoToPlaylist(videoPrivacy: string, playlistPrivacy: string): boolean {
+    if (playlistPrivacy === 'public') {
+      return videoPrivacy === 'public';
+    }
+    if (playlistPrivacy === 'unlisted') {
+      return videoPrivacy === 'public' || videoPrivacy === 'unlisted';
+    }
+    if (playlistPrivacy === 'private') {
+      return true; // Allow all
+    }
+    return false;
+  }
+
+  /**
    * Validate configuration
    */
   private validateConfiguration(): ValidationResult {
@@ -702,6 +718,22 @@ class PlaylistManager {
           continue;
         }
 
+        // === Privacy enforcement ===
+        const videoPrivacy = video.privacyStatus;
+        const playlistPrivacy = playlistCache.privacyStatus;
+        if (!this.canAddVideoToPlaylist(videoPrivacy, playlistPrivacy)) {
+          assignment.assignedPlaylists.push({
+            playlistId: playlist.id,
+            playlistTitle: playlist.title,
+            position: 0,
+            status: 'skipped',
+            error: `Privacy rule: cannot add ${videoPrivacy} video to ${playlistPrivacy} playlist`
+          });
+          getLogger().info(`Skipped adding video ${video.id} (${videoPrivacy}) to playlist ${playlist.title} (${playlistPrivacy}) due to privacy rule.`);
+          continue;
+        }
+        // === End privacy enforcement ===
+
         // === Prevent duplicate playlist entries ===
         const alreadyInPlaylist = playlistCache.items.some(item => item.videoId === video.id);
         if (alreadyInPlaylist) {
@@ -892,6 +924,8 @@ class PlaylistManager {
     return `${hours.toString().padStart(2, '0')}:${(minutes % 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
   }
 }
+
+export { PlaylistManager };
 
 async function main(): Promise<void> {
   const program = new Command();

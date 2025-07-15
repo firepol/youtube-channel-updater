@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { VideoProcessor } from '../scripts/process-videos';
 import { LocalVideo } from '../src/types/api-types';
 import { initializeLogger, LogLevel } from '../src/utils/logger';
+import { PlaylistManager } from '../scripts/manage-playlists';
 
 // Mock YouTube client
 const mockYouTubeClient = {
@@ -452,5 +453,34 @@ describe('Privacy Logic', () => {
   it('should prefer private over unlisted if both keywords match', () => {
     const video = { title: 'This is a secret unlisted microphone video', privacyStatus: 'public' } as any;
     expect(processor['determinePrivacy'](video, true)).toBe('private');
+  });
+}); 
+
+describe('Playlist Privacy Enforcement', () => {
+  // Minimal mock for PlaylistManager
+  class TestPlaylistManager extends PlaylistManager {
+    constructor() { super({} as any, { playlists: [] }); }
+    public canAddVideoToPlaylist(videoPrivacy: string, playlistPrivacy: string) {
+      return super['canAddVideoToPlaylist'](videoPrivacy, playlistPrivacy);
+    }
+  }
+  const manager = new TestPlaylistManager();
+
+  it('should allow only public videos in public playlists', () => {
+    expect(manager.canAddVideoToPlaylist('public', 'public')).toBe(true);
+    expect(manager.canAddVideoToPlaylist('unlisted', 'public')).toBe(false);
+    expect(manager.canAddVideoToPlaylist('private', 'public')).toBe(false);
+  });
+
+  it('should allow public and unlisted videos in unlisted playlists', () => {
+    expect(manager.canAddVideoToPlaylist('public', 'unlisted')).toBe(true);
+    expect(manager.canAddVideoToPlaylist('unlisted', 'unlisted')).toBe(true);
+    expect(manager.canAddVideoToPlaylist('private', 'unlisted')).toBe(false);
+  });
+
+  it('should allow all videos in private playlists', () => {
+    expect(manager.canAddVideoToPlaylist('public', 'private')).toBe(true);
+    expect(manager.canAddVideoToPlaylist('unlisted', 'private')).toBe(true);
+    expect(manager.canAddVideoToPlaylist('private', 'private')).toBe(true);
   });
 }); 
