@@ -720,6 +720,7 @@ class VideoProcessor {
   private determinePrivacy(video: LocalVideo, isPublish: boolean): string {
     // 1. Per-video override (if present)
     if ((video as any).privacyOverride && typeof (video as any).privacyOverride === 'string') {
+      logVerbose(`Privacy for video ${video.id}: using per-video override: ${(video as any).privacyOverride}`);
       return (video as any).privacyOverride;
     }
     // 2. Title keywords (from config)
@@ -732,6 +733,7 @@ class VideoProcessor {
         for (const kw of privacyRules.videoTitleKeywords.private) {
           if (title.includes(kw.toLowerCase())) {
             matchedPrivacy = 'private';
+            logVerbose(`Privacy for video ${video.id}: matched private keyword '${kw}' in title.`);
             break;
           }
         }
@@ -740,6 +742,7 @@ class VideoProcessor {
         for (const kw of privacyRules.videoTitleKeywords.unlisted) {
           if (title.includes(kw.toLowerCase())) {
             matchedPrivacy = 'unlisted';
+            logVerbose(`Privacy for video ${video.id}: matched unlisted keyword '${kw}' in title.`);
             break;
           }
         }
@@ -749,11 +752,14 @@ class VideoProcessor {
     // 3. Default privacy (from config)
     if (isPublish) {
       if (privacyRules.defaultVideoPrivacy) {
+        logVerbose(`Privacy for video ${video.id}: using default publish privacy: ${privacyRules.defaultVideoPrivacy.publish}`);
         return privacyRules.defaultVideoPrivacy.publish;
       }
+      logVerbose(`Privacy for video ${video.id}: using fallback publish privacy: public`);
       return 'public';
     }
     // If not publishing and no keyword/override, keep current privacy
+    logVerbose(`Privacy for video ${video.id}: keeping current privacy: ${video.privacyStatus}`);
     return video.privacyStatus;
   }
 
