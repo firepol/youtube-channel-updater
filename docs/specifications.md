@@ -506,3 +506,45 @@ tsx scripts/build-video-database.ts clean
 - **Research & Analysis**: Fetch public videos from any channel for analysis
 - **Backup & Archive**: Create backups of channel video databases
 - **Cross-Channel Comparison**: Compare video metadata across different channels
+
+## Privacy and Publishing Rules (2024-06 Update)
+
+### Privacy Rules Configuration
+- Privacy for each video can be determined by:
+  - Explicit config override (per video)
+  - Keywords in the title (configurable)
+  - Default privacy for publish/draft
+- Example config:
+```json
+{
+  "privacyRules": {
+    "videoTitleKeywords": {
+      "unlisted": ["unlisted", "microphone"],
+      "private": ["private", "secret"]
+    },
+    "defaultVideoPrivacy": {
+      "publish": "public",
+      "draft": "unlisted"
+    }
+  }
+}
+```
+- The most restrictive privacy found applies (private > unlisted > public).
+- Manual per-video override always takes precedence.
+
+### Publishing Logic
+- The `--publish` option in `process-videos.ts` will:
+  - Set privacy to public **only if** no privacy keyword or override applies.
+  - If a video is public but matches an "unlisted" or "private" keyword, it will be changed to the more restrictive privacy.
+  - If a video is unlisted/private by keyword or override, it will **not** be made public, even with `--publish`.
+
+### Playlist Assignment Restrictions
+- Unlisted/private videos **cannot** be added to public playlists.
+- Unlisted videos **can** be added to unlisted playlists.
+- Private videos are not added to any public or unlisted playlists.
+- These rules are enforced by config and checked before playlist assignment.
+
+### Edge Cases
+- If a video matches both "unlisted" and "private" keywords, the most restrictive privacy is used.
+- If a video is already public but should be unlisted/private, the script will downgrade its privacy.
+- Batch operations process each video according to these rules.
