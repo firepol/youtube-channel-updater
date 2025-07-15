@@ -65,22 +65,6 @@ class PlaylistDiscoverer {
   }
 
   /**
-   * Sanitize playlist name for file naming
-   */
-  private sanitizePlaylistName(name: string | undefined | null): string {
-    if (!name) {
-      return 'untitled_playlist';
-    }
-    
-    return name
-      .replace(/[^a-zA-Z0-9\s-_]/g, '') // Remove special characters
-      .replace(/\s+/g, '_') // Replace spaces with underscores
-      .replace(/_+/g, '_') // Replace multiple underscores with single
-      .toLowerCase()
-      .trim();
-  }
-
-  /**
    * Correct privacy status based on playlist title and other indicators
    */
   private correctPrivacyStatus(playlist: YouTubePlaylist): string {
@@ -315,4 +299,55 @@ class PlaylistDiscoverer {
       this.logger.info('Discovered playlists:');
       for (const playlist of allPlaylists) {
         const sanitizedName = sanitizePlaylistName(playlist.title);
-        this.logger.info(`
+        this.logger.info(`  - ${playlist.title || 'Untitled Playlist'} (${playlist.itemCount || 0} items) -> ${sanitizedName}.json`);
+      }
+
+    } catch (error) {
+      this.logger.error('Failed to discover playlists', error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clean up playlist files
+   */
+  async clean(): Promise<void> {
+    try {
+      await fs.emptyDir(this.playlistsDir);
+      this.logger.success('Cleaned up playlist files');
+    } catch (error) {
+      this.logger.error('Failed to clean up playlist files', error as Error);
+    }
+  }
+}
+
+// Main execution
+async function main() {
+  const discoverer = new PlaylistDiscoverer();
+  
+  try {
+    await discoverer.initialize();
+
+    const args = process.argv.slice(2);
+    const command = args[0];
+
+    switch (command) {
+      case 'clean':
+        await discoverer.clean();
+        break;
+      case 'discover':
+      default:
+        await discoverer.discoverPlaylists();
+        break;
+    }
+
+  } catch (error) {
+    console.error('Playlist discovery failed:', error);
+    process.exit(1);
+  }
+}
+
+// Run if called directly
+if (require.main === module) {
+  main();
+}
