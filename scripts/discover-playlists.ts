@@ -7,6 +7,7 @@ import { ConfigLoader } from '../src/config/config-loader';
 import { initializeLogger, LogLevel } from '../src/utils/logger';
 import { YouTubePlaylist, PlaylistConfig, PlaylistRule } from '../src/types/api-types';
 import { sanitizePlaylistName } from '../src/utils/playlist';
+import { Command } from 'commander';
 
 class PlaylistDiscoverer {
   private youtubeClient!: YouTubeClient;
@@ -199,7 +200,7 @@ class PlaylistDiscoverer {
   /**
    * Discover all playlists
    */
-  async discoverPlaylists(): Promise<void> {
+  async discoverPlaylists(fetchItems = false): Promise<void> {
     try {
       this.logger.info('Starting playlist discovery...');
 
@@ -239,8 +240,40 @@ class PlaylistDiscoverer {
             
             allPlaylists.push(playlist);
             
-            // Create empty JSON file for each playlist
-            await this.createPlaylistFile(playlist);
+            // Fetch items if requested
+            let items: any[] = [];
+            if (fetchItems) {
+              try {
+                const playlistItemsResponse = await this.youtubeClient.getPlaylistItems(playlist.id);
+                if (playlistItemsResponse && playlistItemsResponse.items) {
+                  items = playlistItemsResponse.items.map((item: any, index: number) => ({
+                    position: index,
+                    videoId: item.resourceId.videoId,
+                    title: item.title,
+                    publishedAt: item.publishedAt
+                  }));
+                }
+              } catch (error) {
+                this.logger.error(`Failed to fetch items for playlist ${playlist.title}`, error as Error);
+              }
+            }
+            // Create playlist file with items if fetched, else empty
+            const sanitizedName = sanitizePlaylistName(playlist.title);
+            const filePath = path.join(this.playlistsDir, `${sanitizedName}.json`);
+            const playlistData = {
+              id: playlist.id,
+              title: playlist.title || 'Untitled Playlist',
+              description: playlist.description || '',
+              privacyStatus: this.correctPrivacyStatus(playlist),
+              itemCount: playlist.itemCount || 0,
+              items
+            };
+            try {
+              await fs.writeJson(filePath, playlistData, { spaces: 2 });
+              this.logger.verbose(`Created playlist file: ${filePath}`);
+            } catch (error) {
+              this.logger.error(`Failed to create playlist file for ${playlist.title || 'untitled'}`, error as Error);
+            }
           }
 
           this.logger.info(`Page ${pageCount}: Found ${response.items.length} playlists`);
@@ -323,24 +356,22 @@ class PlaylistDiscoverer {
 
 // Main execution
 async function main() {
+  const program = new Command();
+  program
+    .option('--fetch-items', 'Fetch all items (videos) for each playlist and populate playlist JSON files')
+    .option('clean', 'Clean up playlist files')
+    .option('discover', 'Discover playlists (default)');
+  program.parse(process.argv);
+  const opts = program.opts();
+
   const discoverer = new PlaylistDiscoverer();
-  
   try {
     await discoverer.initialize();
-
-    const args = process.argv.slice(2);
-    const command = args[0];
-
-    switch (command) {
-      case 'clean':
-        await discoverer.clean();
-        break;
-      case 'discover':
-      default:
-        await discoverer.discoverPlaylists();
-        break;
+    if (opts.clean) {
+      await discoverer.clean();
+      return;
     }
-
+    await discoverer.discoverPlaylists(!!opts.fetchItems);
   } catch (error) {
     console.error('Playlist discovery failed:', error);
     process.exit(1);
