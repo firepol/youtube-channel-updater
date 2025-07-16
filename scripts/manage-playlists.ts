@@ -698,8 +698,8 @@ class PlaylistManager {
         }
         // === End rate limit error handling ===
 
-        // Always update local cache after successful add (even in dryRun for consistency)
-        if (result.success) {
+        // Only update local cache on disk if not dryRun
+        if (result.success && !options.dryRun) {
           await this.updatePlaylistCache(playlist.id, video.id, position, video.title);
         }
 
