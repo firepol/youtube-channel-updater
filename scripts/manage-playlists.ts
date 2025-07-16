@@ -57,6 +57,7 @@ interface ProcessingOptions {
   descriptionNotContains?: string | undefined; // Direct description not contains filter
   minViews?: number | undefined; // Direct views filter
   maxViews?: number | undefined; // Direct views filter
+  orphans: boolean; // New option for processing only orphans
 }
 
 interface DryRunPreview {
@@ -949,6 +950,7 @@ async function main(): Promise<void> {
     .option('--description-not-contains <text>', 'Direct description not contains filter')
     .option('--min-views <number>', 'Direct views filter')
     .option('--max-views <number>', 'Direct views filter')
+    .option('--orphans', 'Process only videos not present in any playlist (orphans)')
     .option('-h, --help', 'Show help information')
     .parse();
 
@@ -969,7 +971,8 @@ async function main(): Promise<void> {
     descriptionContains: program.opts().descriptionContains,
     descriptionNotContains: program.opts().descriptionNotContains,
     minViews: program.opts().minViews ? Number(program.opts().minViews) : undefined,
-    maxViews: program.opts().maxViews ? Number(program.opts().maxViews) : undefined
+    maxViews: program.opts().maxViews ? Number(program.opts().maxViews) : undefined,
+    orphans: program.opts().orphans || false
   };
 
   // Check if help was requested
@@ -1017,8 +1020,38 @@ async function main(): Promise<void> {
 
     let videos: LocalVideo[] = [];
 
-    // Load videos to process
-    if (options.videoId) {
+    // === ORPHANS LOGIC ===
+    if (options.orphans) {
+      // Load all videos
+      if (!await fs.pathExists('data/videos.json')) {
+        getLogger().error('Video database not found at data/videos.json');
+        process.exit(1);
+      }
+      const allVideos = await fs.readJson('data/videos.json') as LocalVideo[];
+      // Load all playlist caches
+      const playlistsDir = path.join('data', 'playlists');
+      const playlistFiles = (await fs.pathExists(playlistsDir)) ? await fs.readdir(playlistsDir) : [];
+      const playlistVideoIds = new Set<string>();
+      for (const file of playlistFiles) {
+        if (file.endsWith('.json')) {
+          const playlist = await fs.readJson(path.join(playlistsDir, file));
+          if (playlist.items && Array.isArray(playlist.items)) {
+            for (const item of playlist.items) {
+              if (item.videoId) playlistVideoIds.add(item.videoId);
+            }
+          }
+        }
+      }
+      // Filter videos not present in any playlist
+      videos = allVideos.filter(v => !playlistVideoIds.has(v.id));
+      getLogger().info(`Found ${videos.length} orphan videos (not in any playlist)`);
+      if (videos.length === 0) {
+        getLogger().info('No orphan videos to process');
+        return;
+      }
+    }
+    // === END ORPHANS LOGIC ===
+    else if (options.videoId) {
       // Process specific video
       const videoDatabase = await fs.readJson('data/videos.json') as LocalVideo[];
       const video = videoDatabase.find(v => v.id === options.videoId);
