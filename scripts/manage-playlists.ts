@@ -135,16 +135,6 @@ interface ValidationResult {
   errors: string[];
 }
 
-interface QuotaEstimate {
-  totalVideos: number;
-  apiCallsRequired: number;
-  quotaUnitsRequired: number;
-  estimatedCost: number;
-  dailyQuotaImpact: number;
-  processingTimeEstimate: string;
-  warnings: string[];
-}
-
 class PlaylistMatcher {
   /**
    * Check if a video title matches playlist rules
@@ -259,7 +249,7 @@ class PlaylistManager {
   /**
    * Load playlist cache from local file
    */
-  private async loadPlaylistCache(playlistId: string, playlistTitle?: string): Promise<LocalPlaylist | null> {
+  private async loadPlaylistCache(_unused: string, playlistTitle?: string): Promise<LocalPlaylist | null> {
     try {
       // Use sanitized title for filename
       const sanitizedName = sanitizePlaylistName(playlistTitle);
