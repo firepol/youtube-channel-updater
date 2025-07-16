@@ -454,33 +454,46 @@ describe('Privacy Logic', () => {
     const video = { title: 'This is a secret unlisted microphone video', privacyStatus: 'public' } as any;
     expect(processor['determinePrivacy'](video, true)).toBe('private');
   });
+
+  it('should downgrade public to unlisted if title contains "unlisted" and config matches', () => {
+    const config = {
+      ...mockConfig,
+      privacyRules: {
+        videoTitleKeywords: {
+          unlisted: ['unlisted'],
+          private: ['private']
+        },
+        defaultVideoPrivacy: {
+          publish: 'public',
+          draft: 'unlisted'
+        }
+      }
+    };
+    const processor = new VideoProcessor(mockYouTubeClient as any, config as any);
+    const video = { title: 'This is an unlisted test', privacyStatus: 'public' } as any;
+    expect(processor['determinePrivacy'](video, true)).toBe('unlisted');
+  });
 }); 
 
 describe('Playlist Privacy Enforcement', () => {
   // Minimal mock for PlaylistManager
-  class TestPlaylistManager extends PlaylistManager {
-    constructor() { super({} as any, { playlists: [] }); }
-    public canAddVideoToPlaylist(videoPrivacy: string, playlistPrivacy: string) {
-      return super['canAddVideoToPlaylist'](videoPrivacy, playlistPrivacy);
-    }
-  }
-  const manager = new TestPlaylistManager();
+  const manager = new PlaylistManager({} as any, { playlists: [] });
 
   it('should allow only public videos in public playlists', () => {
-    expect(manager.canAddVideoToPlaylist('public', 'public')).toBe(true);
-    expect(manager.canAddVideoToPlaylist('unlisted', 'public')).toBe(false);
-    expect(manager.canAddVideoToPlaylist('private', 'public')).toBe(false);
+    expect(manager['canAddVideoToPlaylist']('public', 'public')).toBe(true);
+    expect(manager['canAddVideoToPlaylist']('unlisted', 'public')).toBe(false);
+    expect(manager['canAddVideoToPlaylist']('private', 'public')).toBe(false);
   });
 
   it('should allow public and unlisted videos in unlisted playlists', () => {
-    expect(manager.canAddVideoToPlaylist('public', 'unlisted')).toBe(true);
-    expect(manager.canAddVideoToPlaylist('unlisted', 'unlisted')).toBe(true);
-    expect(manager.canAddVideoToPlaylist('private', 'unlisted')).toBe(false);
+    expect(manager['canAddVideoToPlaylist']('public', 'unlisted')).toBe(true);
+    expect(manager['canAddVideoToPlaylist']('unlisted', 'unlisted')).toBe(true);
+    expect(manager['canAddVideoToPlaylist']('private', 'unlisted')).toBe(false);
   });
 
   it('should allow all videos in private playlists', () => {
-    expect(manager.canAddVideoToPlaylist('public', 'private')).toBe(true);
-    expect(manager.canAddVideoToPlaylist('unlisted', 'private')).toBe(true);
-    expect(manager.canAddVideoToPlaylist('private', 'private')).toBe(true);
+    expect(manager['canAddVideoToPlaylist']('public', 'private')).toBe(true);
+    expect(manager['canAddVideoToPlaylist']('unlisted', 'private')).toBe(true);
+    expect(manager['canAddVideoToPlaylist']('private', 'private')).toBe(true);
   });
 }); 
