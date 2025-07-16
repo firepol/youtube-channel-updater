@@ -239,31 +239,6 @@ class PositionCalculator {
       return dateA - dateB;
     });
   }
-
-  /**
-   * Handle videos with the same date by maintaining original order
-   */
-  private handleSameDateVideos(videos: LocalPlaylistItem[]): LocalPlaylistItem[] {
-    // Group videos by date
-    const groupedByDate = new Map<string, LocalPlaylistItem[]>();
-    
-    for (const video of videos) {
-      const date = video.publishedAt.split('T')[0]; // YYYY-MM-DD
-      if (!groupedByDate.has(date)) {
-        groupedByDate.set(date, []);
-      }
-      groupedByDate.get(date)!.push(video);
-    }
-    
-    // Sort each group by original position
-    const result: LocalPlaylistItem[] = [];
-    for (const [date, dateVideos] of groupedByDate) {
-      dateVideos.sort((a, b) => a.position - b.position);
-      result.push(...dateVideos);
-    }
-    
-    return result;
-  }
 }
 
 class PlaylistManager {
@@ -487,38 +462,6 @@ class PlaylistManager {
       valid: errors.length === 0,
       warnings,
       errors
-    };
-  }
-
-  /**
-   * Estimate API quota usage
-   */
-  private estimateApiQuota(videos: LocalVideo[]): QuotaEstimate {
-    // Count total playlist assignments that would be made
-    let totalAssignments = 0;
-    for (const video of videos) {
-      const matchingPlaylists = this.matcher.getMatchingPlaylists(video.title, this.playlistConfig.playlists);
-      totalAssignments += matchingPlaylists.length;
-    }
-
-    const apiCallsRequired = totalAssignments; // 1 API call per playlist assignment
-    const quotaUnitsRequired = totalAssignments * 50; // 50 units per playlist assignment
-    const dailyQuotaImpact = (quotaUnitsRequired / 10000) * 100; // Percentage of daily quota
-    const processingTimeEstimate = `${Math.ceil(totalAssignments / 10)}:${(totalAssignments % 10 * 6).toString().padStart(2, '0')}`; // Rough estimate
-
-    const warnings: string[] = [];
-    if (dailyQuotaImpact > 80) {
-      warnings.push(`High quota usage: ${dailyQuotaImpact.toFixed(1)}% of daily limit`);
-    }
-
-    return {
-      totalVideos: videos.length,
-      apiCallsRequired,
-      quotaUnitsRequired,
-      estimatedCost: quotaUnitsRequired,
-      dailyQuotaImpact,
-      processingTimeEstimate,
-      warnings
     };
   }
 
@@ -861,7 +804,6 @@ class PlaylistManager {
     let successfulAssignments = 0;
     let failedAssignments = 0;
     let errorOccurred = false;
-    let errorMessage = '';
 
     try {
       for (let i = 0; i < videos.length; i++) {
@@ -879,7 +821,6 @@ class PlaylistManager {
             // If quota/rate limit error, set flag and break
             if (playlistAssignment.error && playlistAssignment.error.toLowerCase().includes('quota')) {
               errorOccurred = true;
-              errorMessage = playlistAssignment.error;
               break;
             }
           }
