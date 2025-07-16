@@ -58,6 +58,7 @@ interface ProcessingOptions {
   minViews?: number | undefined; // Direct views filter
   maxViews?: number | undefined; // Direct views filter
   orphans: boolean; // New option for processing only orphans
+  simulateOrphanAssignments: boolean; // New option for simulating orphan assignments
 }
 
 interface DryRunPreview {
@@ -326,7 +327,9 @@ class PlaylistManager {
    */
   private async updatePlaylistCache(playlistId: string, videoId: string, position: number, title: string): Promise<void> {
     try {
-      const playlist = await this.loadPlaylistCache(playlistId);
+      const playlistFileName = `${sanitizePlaylistName(title)}.json`;
+      const cacheFile = path.join(this.playlistsDir, playlistFileName);
+      const playlist = await this.loadPlaylistCache(playlistId, title);
       if (playlist) {
         // Insert new item at the calculated position
         playlist.items.splice(position, 0, {
@@ -342,9 +345,12 @@ class PlaylistManager {
         }
 
         await this.savePlaylistCache(playlistId, playlist);
+      } else {
+        console.warn(`[WARN] Playlist not found for update: playlistId=${playlistId}, title="${title}", file=${cacheFile}`);
       }
     } catch (error) {
       logVerbose(`Failed to update playlist cache for ${playlistId}: ${error}`);
+      console.error(`[ERROR] Exception in updatePlaylistCache for playlistId=${playlistId}, title="${title}":`, error);
     }
   }
 
@@ -882,6 +888,7 @@ async function main(): Promise<void> {
     .option('--min-views <number>', 'Direct views filter')
     .option('--max-views <number>', 'Direct views filter')
     .option('--orphans', 'Process only videos not present in any playlist (orphans)')
+    .option('--simulate-orphan-assignments', 'Simulate assigning all orphans to playlists and update cache files (no API calls, for testing)')
     .option('-h, --help', 'Show help information')
     .parse();
 
@@ -903,7 +910,8 @@ async function main(): Promise<void> {
     descriptionNotContains: program.opts().descriptionNotContains,
     minViews: program.opts().minViews ? Number(program.opts().minViews) : undefined,
     maxViews: program.opts().maxViews ? Number(program.opts().maxViews) : undefined,
-    orphans: program.opts().orphans || false
+    orphans: program.opts().orphans || false,
+    simulateOrphanAssignments: program.opts().simulateOrphanAssignments || false
   };
 
   // Check if help was requested
@@ -1062,6 +1070,65 @@ async function main(): Promise<void> {
       getLogger().info('No videos to process');
       return;
     }
+
+    // === SIMULATE ORPHAN ASSIGNMENTS LOGIC ===
+    if (options.simulateOrphanAssignments) {
+      // Load all videos
+      if (!await fs.pathExists('data/videos.json')) {
+        getLogger().error('Video database not found at data/videos.json');
+        process.exit(1);
+      }
+      const allVideos = await fs.readJson('data/videos.json') as LocalVideo[];
+      // Load all playlist caches
+      const playlistsDir = path.join('data', 'playlists');
+      const playlistFiles = (await fs.pathExists(playlistsDir)) ? await fs.readdir(playlistsDir) : [];
+      const playlistVideoIds = new Set<string>();
+      for (const file of playlistFiles) {
+        if (file.endsWith('.json')) {
+          const playlist = await fs.readJson(path.join(playlistsDir, file));
+          if (playlist.items && Array.isArray(playlist.items)) {
+            for (const item of playlist.items) {
+              if (item.videoId) playlistVideoIds.add(item.videoId);
+            }
+          }
+        }
+      }
+      // Filter videos not present in any playlist
+      const orphans = allVideos.filter(v => !playlistVideoIds.has(v.id));
+      getLogger().info(`[SIMULATE] Found ${orphans.length} orphan videos (not in any playlist)`);
+      if (orphans.length === 0) {
+        getLogger().info('[SIMULATE] No orphan videos to process');
+        return;
+      }
+      // Simulate assigning each orphan to all matching playlists and update cache
+      const config = await loadConfig();
+      const playlistManager = new PlaylistManager(new YouTubeClient('', '', '', '', 0, 0, 0), config.playlists);
+      for (const video of orphans) {
+        const matchingPlaylists = playlistManager["matcher"].getMatchingPlaylists(video.title, config.playlists.playlists);
+        for (const playlist of matchingPlaylists) {
+          // Load or refresh playlist cache
+          let playlistCache = await playlistManager["loadPlaylistCache"](playlist.id, playlist.title);
+          if (!playlistCache) {
+            getLogger().warning(`[SIMULATE] Playlist cache not found for ${playlist.title}`);
+            continue;
+          }
+          // Prevent duplicate
+          const alreadyInPlaylist = playlistCache.items.some(item => item.videoId === video.id);
+          if (alreadyInPlaylist) {
+            getLogger().info(`[SIMULATE] Video ${video.id} already in playlist ${playlist.title}`);
+            continue;
+          }
+          // Calculate position
+          const position = playlistManager["calculator"].calculatePosition(video.recordingDate || video.publishedAt, playlistCache.items);
+          // Update cache
+          await playlistManager["updatePlaylistCache"](playlist.id, video.id, position, playlist.title);
+          getLogger().info(`[SIMULATE] Updated playlist cache for ${playlist.title} with video ${video.id}`);
+        }
+      }
+      getLogger().info('[SIMULATE] Simulation complete. Playlist caches updated.');
+      return;
+    }
+    // === END SIMULATE ORPHAN ASSIGNMENTS LOGIC ===
 
     // Process videos
     const result = await playlistManager.processVideos(videos, options);
