@@ -1,7 +1,6 @@
 #!/usr/bin/env tsx
 
 import fs from 'fs-extra';
-import path from 'path';
 import { Command } from 'commander';
 import { ConfigLoader } from '../src/config/config-loader';
 import { initializeLogger, LogLevel } from '../src/utils/logger';
@@ -102,32 +101,25 @@ export class VideoFilter {
     const searchValue = caseSensitive ? value : (value as string).toLowerCase();
     
     let fieldValue: string = '';
-    let fieldName: string = '';
 
     switch (type) {
       case 'title_contains':
         fieldValue = video.title;
-        fieldName = 'title';
         break;
       case 'title_not_contains':
         fieldValue = video.title;
-        fieldName = 'title';
         break;
       case 'description_contains':
         fieldValue = video.description;
-        fieldName = 'description';
         break;
       case 'description_not_contains':
         fieldValue = video.description;
-        fieldName = 'description';
         break;
       case 'tags_contains':
         fieldValue = (video.tags || []).join(' ');
-        fieldName = 'tags';
         break;
       case 'tags_not_contains':
         fieldValue = (video.tags || []).join(' ');
-        fieldName = 'tags';
         break;
       default:
         return false;
