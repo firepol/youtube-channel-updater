@@ -406,6 +406,7 @@ npx tsx scripts/process-videos.ts [options]
 - `npm run process-videos -- --privacy-status unlisted --dry-run` - Preview unlisted video changes
 - `npm run process-videos -- --title-contains "tutorial" --min-views 100 --dry-run` - Preview tutorial videos with 100+ views
 - `npm run process-videos -- --privacy-status private --description-not-contains "metadata" --dry-run`
+- `npm run process-videos -- --dry-run --filter-config config/filter-missing-recording-date.json --output logs/noRecordingDate.json` - Process videos without a recordingDate set
 
 **Features**:
 - Title and description transformation
