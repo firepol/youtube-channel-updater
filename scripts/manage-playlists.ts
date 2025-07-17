@@ -856,13 +856,29 @@ class PlaylistManager {
 
   /**
    * Sort playlist items by field ("date" or "title")
+   * For date, use recordingDate from video database if available, fallback to publishedAt
    */
   sortPlaylistItems(playlist: LocalPlaylist, field: 'date' | 'title' = 'date'): LocalPlaylistItem[] {
     let sorted: LocalPlaylistItem[] = [...playlist.items];
     if (field === 'title') {
       sorted.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
     } else {
-      sorted.sort((a, b) => new Date(a.publishedAt).getTime() - new Date(b.publishedAt).getTime());
+      // Load video database to get recordingDate
+      let videoDb: Record<string, { recordingDate?: string; publishedAt: string }> = {};
+      try {
+        const db = require('fs-extra').readJsonSync('data/videos.json');
+        for (const v of db) {
+          videoDb[v.id] = { recordingDate: v.recordingDate, publishedAt: v.publishedAt };
+        }
+      } catch (e) {
+        // If not found, fallback to publishedAt only
+        videoDb = {};
+      }
+      sorted.sort((a, b) => {
+        const aDate = videoDb[a.videoId]?.recordingDate || videoDb[a.videoId]?.publishedAt || a.publishedAt;
+        const bDate = videoDb[b.videoId]?.recordingDate || videoDb[b.videoId]?.publishedAt || b.publishedAt;
+        return new Date(aDate).getTime() - new Date(bDate).getTime();
+      });
     }
     // Re-assign positions
     sorted.forEach((item, idx) => (item.position = idx));
