@@ -61,6 +61,7 @@ interface ProcessingOptions {
   simulateOrphanAssignments: boolean; // New option for simulating orphan assignments
   list?: string | undefined; // New option for targeting a specific playlist
   sort?: 'date' | 'title' | undefined; // New option for sorting playlist items
+  removeDuplicates: boolean; // New option for removing duplicates
 }
 
 interface DryRunPreview {
@@ -946,6 +947,7 @@ async function main(): Promise<void> {
     .option('--simulate-orphan-assignments', 'Simulate assigning all orphans to playlists and update cache files (no API calls, for testing)')
     .option('--list <playlist>', 'Target a specific playlist by title or ID (case-insensitive)')
     .option('--sort <field>', 'Sort playlist items by "date" (default) or "title"')
+    .option('--remove-duplicates', 'Remove duplicate videos from the specified playlist (requires --list)')
     .option('-h, --help', 'Show help information')
     .parse();
 
@@ -970,7 +972,8 @@ async function main(): Promise<void> {
     orphans: program.opts().orphans || false,
     simulateOrphanAssignments: program.opts().simulateOrphanAssignments || false,
     list: program.opts().list, // New option
-    sort: program.opts().sort // New option
+    sort: program.opts().sort, // New option
+    removeDuplicates: program.opts().removeDuplicates || false
   };
 
   // Check if help was requested
@@ -1264,6 +1267,38 @@ async function main(): Promise<void> {
       return;
     }
     // === END SORT LOGIC ===
+
+    // === REMOVE DUPLICATES LOGIC ===
+    if (options.removeDuplicates) {
+      if (!targetPlaylist) {
+        getLogger().error('You must specify --list <playlist> to remove duplicates from a specific playlist.');
+        process.exit(1);
+      }
+      // Load playlist cache
+      const playlistCache = await playlistManager["loadPlaylistCache"](targetPlaylist.id, targetPlaylist.title);
+      if (!playlistCache) {
+        getLogger().error(`Playlist cache not found for ${targetPlaylist.title}`);
+        process.exit(1);
+      }
+      const { newItems, removed } = playlistManager.removeDuplicatesFromPlaylist(playlistCache);
+      if (removed.length === 0) {
+        getLogger().info(`No duplicates found in playlist "${targetPlaylist.title}".`);
+        return;
+      }
+      getLogger().info(`Found and removed ${removed.length} duplicate(s) from playlist "${targetPlaylist.title}".`);
+      removed.forEach(item => {
+        getLogger().info(`  Removed: ${item.title} (${item.publishedAt}) [${item.videoId}] at position ${item.position}`);
+      });
+      if (options.dryRun) {
+        getLogger().info('[DRY RUN] No changes written.');
+        return;
+      }
+      playlistCache.items = newItems;
+      await playlistManager["savePlaylistCache"](playlistCache.id, playlistCache);
+      getLogger().info(`Saved playlist cache for "${targetPlaylist.title}" with duplicates removed.`);
+      return;
+    }
+    // === END REMOVE DUPLICATES LOGIC ===
 
     // Process videos
     // If --list, restrict assignments to only the target playlist
