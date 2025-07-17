@@ -59,6 +59,7 @@ interface ProcessingOptions {
   maxViews?: number | undefined; // Direct views filter
   orphans: boolean; // New option for processing only orphans
   simulateOrphanAssignments: boolean; // New option for simulating orphan assignments
+  list?: string | undefined; // New option for targeting a specific playlist
 }
 
 interface DryRunPreview {
@@ -890,6 +891,7 @@ async function main(): Promise<void> {
     .option('--max-views <number>', 'Direct views filter')
     .option('--orphans', 'Process only videos not present in any playlist (orphans)')
     .option('--simulate-orphan-assignments', 'Simulate assigning all orphans to playlists and update cache files (no API calls, for testing)')
+    .option('--list <playlist>', 'Target a specific playlist by title or ID (case-insensitive)')
     .option('-h, --help', 'Show help information')
     .parse();
 
@@ -912,7 +914,8 @@ async function main(): Promise<void> {
     minViews: program.opts().minViews ? Number(program.opts().minViews) : undefined,
     maxViews: program.opts().maxViews ? Number(program.opts().maxViews) : undefined,
     orphans: program.opts().orphans || false,
-    simulateOrphanAssignments: program.opts().simulateOrphanAssignments || false
+    simulateOrphanAssignments: program.opts().simulateOrphanAssignments || false,
+    list: program.opts().list // New option
   };
 
   // Check if help was requested
@@ -955,10 +958,34 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
+    // --- Playlist resolution helper ---
+    function resolvePlaylist(listValue: string, playlists: PlaylistRule[]): PlaylistRule | null {
+      if (!listValue) return null;
+      // Try ID match first
+      let found = playlists.find(p => p.id === listValue);
+      if (found) return found;
+      // Try case-insensitive title match
+      found = playlists.find(p => (p.title || '').toLowerCase() === listValue.toLowerCase());
+      return found || null;
+    }
+
     // Initialize playlist manager
     const playlistManager = new PlaylistManager(youtubeClient, config.playlists);
 
     let videos: LocalVideo[] = [];
+    let targetPlaylist: PlaylistRule | null = null;
+    if (options.list) {
+      targetPlaylist = resolvePlaylist(options.list, config.playlists.playlists);
+      if (!targetPlaylist) {
+        getLogger().error(`Playlist not found by id or title: ${options.list}`);
+        getLogger().info('Available playlists:');
+        for (const p of config.playlists.playlists) {
+          getLogger().info(`  - ${p.title} (${p.id})`);
+        }
+        process.exit(1);
+      }
+      getLogger().info(`Targeting only playlist: ${targetPlaylist.title} (${targetPlaylist.id})`);
+    }
 
     // === ORPHANS LOGIC ===
     if (options.orphans) {
@@ -983,12 +1010,24 @@ async function main(): Promise<void> {
         }
       }
       // Filter videos not present in any playlist
-      videos = allVideos.filter(v => !playlistVideoIds.has(v.id));
-      getLogger().info(`Found ${videos.length} orphan videos (not in any playlist)`);
-      if (videos.length === 0) {
+      let orphans = allVideos.filter(v => !playlistVideoIds.has(v.id));
+      getLogger().info(`Found ${orphans.length} orphan videos (not in any playlist)`);
+      if (orphans.length === 0) {
         getLogger().info('No orphan videos to process');
         return;
       }
+      // If --list, only process orphans that match the playlist rule
+      if (targetPlaylist) {
+        // Only assign orphans to the target playlist if they match its keywords
+        const matcher = new PlaylistMatcher();
+        orphans = orphans.filter(v => matcher.matchesPlaylist(v.title, targetPlaylist!.keywords));
+        getLogger().info(`Of those, ${orphans.length} match playlist: ${targetPlaylist.title}`);
+        if (orphans.length === 0) {
+          getLogger().info('No orphan videos match the specified playlist');
+          return;
+        }
+      }
+      videos = orphans;
     }
     // === END ORPHANS LOGIC ===
     else if (options.videoId) {
@@ -1095,18 +1134,28 @@ async function main(): Promise<void> {
         }
       }
       // Filter videos not present in any playlist
-      const orphans = allVideos.filter(v => !playlistVideoIds.has(v.id));
+      let orphans = allVideos.filter(v => !playlistVideoIds.has(v.id));
       getLogger().info(`[SIMULATE] Found ${orphans.length} orphan videos (not in any playlist)`);
       if (orphans.length === 0) {
         getLogger().info('[SIMULATE] No orphan videos to process');
         return;
       }
-      // Simulate assigning each orphan to all matching playlists and update cache
+      // If --list, only process orphans that match the playlist rule
+      if (targetPlaylist) {
+        const matcher = new PlaylistMatcher();
+        orphans = orphans.filter(v => matcher.matchesPlaylist(v.title, targetPlaylist!.keywords));
+        getLogger().info(`[SIMULATE] Of those, ${orphans.length} match playlist: ${targetPlaylist.title}`);
+        if (orphans.length === 0) {
+          getLogger().info('[SIMULATE] No orphan videos match the specified playlist');
+          return;
+        }
+      }
+      // Simulate assigning each orphan to the target playlist (or all if no --list)
       const config = await loadConfig();
       const playlistManager = new PlaylistManager(new YouTubeClient('', '', '', '', 0, 0, 0), config.playlists);
       for (const video of orphans) {
-        const matchingPlaylists = playlistManager["matcher"].getMatchingPlaylists(video.title, config.playlists.playlists);
-        for (const playlist of matchingPlaylists) {
+        const playlistsToAssign = targetPlaylist ? [targetPlaylist] : config.playlists.playlists.filter(p => playlistManager["matcher"].matchesPlaylist(video.title, p.keywords));
+        for (const playlist of playlistsToAssign) {
           // Load or refresh playlist cache
           let playlistCache = await playlistManager["loadPlaylistCache"](playlist.id, playlist.title);
           if (!playlistCache) {
@@ -1132,6 +1181,11 @@ async function main(): Promise<void> {
     // === END SIMULATE ORPHAN ASSIGNMENTS LOGIC ===
 
     // Process videos
+    // If --list, restrict assignments to only the target playlist
+    if (targetPlaylist) {
+      // Patch playlistManager to only use the target playlist for assignments
+      playlistManager["playlistConfig"] = { playlists: [targetPlaylist] };
+    }
     const result = await playlistManager.processVideos(videos, options);
 
     // Output results
