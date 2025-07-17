@@ -195,15 +195,30 @@ class PlaylistDiscoverer {
     return { playlists: mergedPlaylists };
   }
 
-
+  /**
+   * Resolve a playlist by id or title from playlists.json
+   */
+  async resolvePlaylist(listValue: string, playlistsConfigPath: string): Promise<PlaylistRule | null> {
+    try {
+      const config = await fs.readJson(playlistsConfigPath);
+      if (!config.playlists || !Array.isArray(config.playlists)) return null;
+      // Try id match first
+      let found = config.playlists.find((p: PlaylistRule) => p.id === listValue);
+      if (found) return found;
+      // Try title match (case-insensitive)
+      found = config.playlists.find((p: PlaylistRule) => (p.title || '').toLowerCase() === listValue.toLowerCase());
+      return found || null;
+    } catch (e) {
+      return null;
+    }
+  }
 
   /**
-   * Discover all playlists
+   * Discover all playlists, or just one if listValue is provided
    */
-  async discoverPlaylists(fetchItems = false): Promise<void> {
+  async discoverPlaylists(fetchItems = false, listValue?: string): Promise<void> {
     try {
       this.logger.info('Starting playlist discovery...');
-
       // Load existing configuration first
       const existingConfig = await this.loadExistingPlaylistConfig();
       this.logger.info(`Found ${existingConfig.playlists.length} existing playlist configurations`);
@@ -220,6 +235,18 @@ class PlaylistDiscoverer {
       let pageCount = 0;
       const maxResults = 50;
 
+      // If listValue is provided, resolve the playlist
+      let targetPlaylist: PlaylistRule | null = null;
+      if (listValue) {
+        const configPath = path.join(this.configDir, 'playlists.json');
+        targetPlaylist = await this.resolvePlaylist(listValue, configPath);
+        if (!targetPlaylist) {
+          this.logger.error(`Playlist not found by id or title: ${listValue}`);
+          process.exit(1);
+        }
+        this.logger.info(`Fetching only playlist: ${targetPlaylist.title} (${targetPlaylist.id})`);
+      }
+
       do {
         pageCount++;
         this.logger.info(`Fetching playlists page ${pageCount}`);
@@ -234,12 +261,12 @@ class PlaylistDiscoverer {
 
           // Process playlists from this page
           for (const playlist of response.items) {
+            // If --list is specified, skip all except the target
+            if (targetPlaylist && playlist.id !== targetPlaylist.id) continue;
             const correctedPrivacy = this.correctPrivacyStatus(playlist);
             // Temporary debug: Log each playlist found with both API and corrected privacy status
             console.log(`Found playlist: "${playlist.title}" (${correctedPrivacy}) - ${playlist.id}`);
-            
             allPlaylists.push(playlist);
-            
             // Fetch items if requested
             let items: any[] = [];
             if (fetchItems) {
@@ -257,7 +284,7 @@ class PlaylistDiscoverer {
                 this.logger.error(`Failed to fetch items for playlist ${playlist.title}`, error as Error);
               }
             }
-            // Create playlist file with items if fetched, else empty
+            // Create or update playlist file:
             const sanitizedName = sanitizePlaylistName(playlist.title);
             const filePath = path.join(this.playlistsDir, `${sanitizedName}.json`);
             const playlistData = {
@@ -269,8 +296,19 @@ class PlaylistDiscoverer {
               items
             };
             try {
-              await fs.writeJson(filePath, playlistData, { spaces: 2 });
-              this.logger.verbose(`Created playlist file: ${filePath}`);
+              if (fetchItems) {
+                // Overwrite or create if fetching items
+                await fs.writeJson(filePath, playlistData, { spaces: 2 });
+                this.logger.verbose(`Created/updated playlist file: ${filePath}`);
+              } else {
+                // Only create if file does not exist
+                if (!(await fs.pathExists(filePath))) {
+                  await fs.writeJson(filePath, playlistData, { spaces: 2 });
+                  this.logger.verbose(`Created new playlist file: ${filePath}`);
+                } else {
+                  this.logger.verbose(`Playlist file exists, not overwritten: ${filePath}`);
+                }
+              }
             } catch (error) {
               this.logger.error(`Failed to create playlist file for ${playlist.title || 'untitled'}`, error as Error);
             }
@@ -307,32 +345,32 @@ class PlaylistDiscoverer {
       } while (pageToken);
 
       // Merge discovered playlists with existing configuration
-      const mergedConfig = this.mergePlaylistConfigs(existingConfig, allPlaylists);
-      const configPath = path.join(this.configDir, 'playlists.json');
-      
-      try {
-        await fs.writeJson(configPath, mergedConfig, { spaces: 2 });
-        this.logger.success(`Updated playlist configuration: ${configPath}`);
-        this.logger.info(`Preserved ${existingConfig.playlists.length} existing configurations`);
-        this.logger.info(`Added ${mergedConfig.playlists.length - existingConfig.playlists.length} new playlists`);
-      } catch (error) {
-        this.logger.error('Failed to write playlist configuration', error as Error);
-      }
+      if (!listValue) {
+        const mergedConfig = this.mergePlaylistConfigs(existingConfig, allPlaylists);
+        const configPath = path.join(this.configDir, 'playlists.json');
+        try {
+          await fs.writeJson(configPath, mergedConfig, { spaces: 2 });
+          this.logger.success(`Updated playlist configuration: ${configPath}`);
+          this.logger.info(`Preserved ${existingConfig.playlists.length} existing configurations`);
+          this.logger.info(`Added ${mergedConfig.playlists.length - existingConfig.playlists.length} new playlists`);
+        } catch (error) {
+          this.logger.error('Failed to write playlist configuration', error as Error);
+        }
 
-      this.logger.success(`Playlist discovery completed! Found ${allPlaylists.length} playlists`);
-      
-      // Log statistics
-      const publicPlaylists = allPlaylists.filter(p => p.privacyStatus === 'public').length;
-      const privatePlaylists = allPlaylists.filter(p => p.privacyStatus === 'private').length;
-      const unlistedPlaylists = allPlaylists.filter(p => p.privacyStatus === 'unlisted').length;
-      
-      this.logger.info(`Statistics: ${publicPlaylists} public, ${privatePlaylists} private, ${unlistedPlaylists} unlisted playlists`);
-
-      // List discovered playlists
-      this.logger.info('Discovered playlists:');
-      for (const playlist of allPlaylists) {
-        const sanitizedName = sanitizePlaylistName(playlist.title);
-        this.logger.info(`  - ${playlist.title || 'Untitled Playlist'} (${playlist.itemCount || 0} items) -> ${sanitizedName}.json`);
+        this.logger.success(`Playlist discovery completed! Found ${allPlaylists.length} playlists`);
+        // Log statistics
+        const publicPlaylists = allPlaylists.filter(p => p.privacyStatus === 'public').length;
+        const privatePlaylists = allPlaylists.filter(p => p.privacyStatus === 'private').length;
+        const unlistedPlaylists = allPlaylists.filter(p => p.privacyStatus === 'unlisted').length;
+        this.logger.info(`Statistics: ${publicPlaylists} public, ${privatePlaylists} private, ${unlistedPlaylists} unlisted playlists`);
+        // List discovered playlists
+        this.logger.info('Discovered playlists:');
+        for (const playlist of allPlaylists) {
+          const sanitizedName = sanitizePlaylistName(playlist.title);
+          this.logger.info(`  - ${playlist.title || 'Untitled Playlist'} (${playlist.itemCount || 0} items) -> ${sanitizedName}.json`);
+        }
+      } else {
+        this.logger.success(`Playlist discovery completed for single playlist: ${targetPlaylist!.title}`);
       }
 
     } catch (error) {
@@ -359,6 +397,7 @@ async function main() {
   const program = new Command();
   program
     .option('--fetch-items', 'Fetch all items (videos) for each playlist and populate playlist JSON files')
+    .option('--list <value>', 'Fetch items for a specific playlist by id or title')
     .option('clean', 'Clean up playlist files')
     .option('discover', 'Discover playlists (default)');
   program.parse(process.argv);
@@ -371,7 +410,7 @@ async function main() {
       await discoverer.clean();
       return;
     }
-    await discoverer.discoverPlaylists(!!opts.fetchItems);
+    await discoverer.discoverPlaylists(!!opts.fetchItems, opts.list);
   } catch (error) {
     console.error('Playlist discovery failed:', error);
     process.exit(1);
