@@ -60,6 +60,7 @@ interface ProcessingOptions {
   orphans: boolean; // New option for processing only orphans
   simulateOrphanAssignments: boolean; // New option for simulating orphan assignments
   list?: string | undefined; // New option for targeting a specific playlist
+  sort?: 'date' | 'title' | undefined; // New option for sorting playlist items
 }
 
 interface DryRunPreview {
@@ -854,6 +855,21 @@ class PlaylistManager {
   }
 
   /**
+   * Sort playlist items by field ("date" or "title")
+   */
+  sortPlaylistItems(playlist: LocalPlaylist, field: 'date' | 'title' = 'date'): LocalPlaylistItem[] {
+    let sorted: LocalPlaylistItem[] = [...playlist.items];
+    if (field === 'title') {
+      sorted.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+    } else {
+      sorted.sort((a, b) => new Date(a.publishedAt).getTime() - new Date(b.publishedAt).getTime());
+    }
+    // Re-assign positions
+    sorted.forEach((item, idx) => (item.position = idx));
+    return sorted;
+  }
+
+  /**
    * Format duration in HH:MM:SS
    */
   private formatDuration(ms: number): string {
@@ -892,6 +908,7 @@ async function main(): Promise<void> {
     .option('--orphans', 'Process only videos not present in any playlist (orphans)')
     .option('--simulate-orphan-assignments', 'Simulate assigning all orphans to playlists and update cache files (no API calls, for testing)')
     .option('--list <playlist>', 'Target a specific playlist by title or ID (case-insensitive)')
+    .option('--sort <field>', 'Sort playlist items by "date" (default) or "title"')
     .option('-h, --help', 'Show help information')
     .parse();
 
@@ -915,7 +932,8 @@ async function main(): Promise<void> {
     maxViews: program.opts().maxViews ? Number(program.opts().maxViews) : undefined,
     orphans: program.opts().orphans || false,
     simulateOrphanAssignments: program.opts().simulateOrphanAssignments || false,
-    list: program.opts().list // New option
+    list: program.opts().list, // New option
+    sort: program.opts().sort // New option
   };
 
   // Check if help was requested
@@ -1179,6 +1197,36 @@ async function main(): Promise<void> {
       return;
     }
     // === END SIMULATE ORPHAN ASSIGNMENTS LOGIC ===
+
+    // === SORT LOGIC ===
+    if (options.sort) {
+      const sortField = (typeof options.sort === 'string' && options.sort.toLowerCase() === 'title') ? 'title' : 'date';
+      if (!targetPlaylist) {
+        getLogger().error('You must specify --list <playlist> to sort a specific playlist.');
+        process.exit(1);
+      }
+      // Load playlist cache
+      const playlistCache = await playlistManager["loadPlaylistCache"](targetPlaylist.id, targetPlaylist.title);
+      if (!playlistCache) {
+        getLogger().error(`Playlist cache not found for ${targetPlaylist.title}`);
+        process.exit(1);
+      }
+      const sortedItems = playlistManager.sortPlaylistItems(playlistCache, sortField);
+      getLogger().info(`Sorted playlist "${targetPlaylist.title}" by ${sortField}.`);
+      if (options.dryRun) {
+        getLogger().info('[DRY RUN] Sorted order:');
+        sortedItems.forEach((item, idx) => {
+          getLogger().info(`  ${idx + 1}. ${item.title} (${item.publishedAt}) [${item.videoId}]`);
+        });
+        return;
+      }
+      // Save sorted playlist
+      playlistCache.items = sortedItems;
+      await playlistManager["savePlaylistCache"](playlistCache.id, playlistCache);
+      getLogger().info(`Saved sorted playlist cache for "${targetPlaylist.title}".`);
+      return;
+    }
+    // === END SORT LOGIC ===
 
     // Process videos
     // If --list, restrict assignments to only the target playlist
