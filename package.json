@@ -33,24 +33,25 @@
   "author": "YouTube Channel Updater",
   "license": "MIT",
   "dependencies": {
-    "googleapis": "^128.0.0",
-    "dotenv": "^16.3.1",
-    "zod": "^3.22.4",
-    "fs-extra": "^11.1.1",
     "chalk": "^5.3.0",
-    "commander": "^11.1.0"
+    "commander": "^11.1.0",
+    "dotenv": "^16.3.1",
+    "fs-extra": "^11.1.1",
+    "googleapis": "^128.0.0",
+    "json2csv": "^6.0.0-alpha.2",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@types/node": "^20.8.0",
     "@types/fs-extra": "^11.0.1",
+    "@types/node": "^20.8.0",
     "@typescript-eslint/eslint-plugin": "^6.8.0",
     "@typescript-eslint/parser": "^6.8.0",
     "eslint": "^8.51.0",
-    "typescript": "^5.2.2",
     "tsx": "^4.20.3",
+    "typescript": "^5.2.2",
     "vitest": "^0.34.6"
   },
   "engines": {
     "node": ">=18.0.0"
   }
-} 
+}
