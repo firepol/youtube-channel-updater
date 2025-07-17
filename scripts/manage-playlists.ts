@@ -886,6 +886,27 @@ class PlaylistManager {
   }
 
   /**
+   * Remove duplicates from playlist items (keeps first occurrence)
+   * Returns { newItems, removed }
+   */
+  removeDuplicatesFromPlaylist(playlist: LocalPlaylist): { newItems: LocalPlaylistItem[], removed: LocalPlaylistItem[] } {
+    const seen = new Set<string>();
+    const newItems: LocalPlaylistItem[] = [];
+    const removed: LocalPlaylistItem[] = [];
+    for (const item of playlist.items) {
+      if (seen.has(item.videoId)) {
+        removed.push(item);
+      } else {
+        seen.add(item.videoId);
+        newItems.push(item);
+      }
+    }
+    // Re-assign positions
+    newItems.forEach((item, idx) => (item.position = idx));
+    return { newItems, removed };
+  }
+
+  /**
    * Format duration in HH:MM:SS
    */
   private formatDuration(ms: number): string {
