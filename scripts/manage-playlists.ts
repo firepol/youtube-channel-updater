@@ -704,9 +704,9 @@ class PlaylistManager {
         }
         // === End rate limit error handling ===
 
-        // Only update local cache on disk if not dryRun
+        // Update local cache on disk if not dryRun (use playlist title, not video title)
         if (result.success && !options.dryRun) {
-          await this.updatePlaylistCache(playlist.id, video.id, position, video.title);
+          await this.updatePlaylistCache(playlist.id, video.id, position, playlist.title);
         }
 
         assignment.assignedPlaylists.push({
