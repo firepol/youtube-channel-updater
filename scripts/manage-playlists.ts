@@ -325,17 +325,17 @@ class PlaylistManager {
   /**
    * Update local playlist cache after adding a video
    */
-  private async updatePlaylistCache(playlistId: string, videoId: string, position: number, title: string): Promise<void> {
+  private async updatePlaylistCache(playlistId: string, videoId: string, position: number, playlistTitle: string, videoTitle: string): Promise<void> {
     try {
-      const playlistFileName = `${sanitizePlaylistName(title)}.json`;
+      const playlistFileName = `${sanitizePlaylistName(playlistTitle)}.json`;
       const cacheFile = path.join(this.playlistsDir, playlistFileName);
-      const playlist = await this.loadPlaylistCache(playlistId, title);
+      const playlist = await this.loadPlaylistCache(playlistId, playlistTitle);
       if (playlist) {
         // Insert new item at the calculated position
         playlist.items.splice(position, 0, {
           position,
           videoId,
-          title,
+          title: videoTitle,
           publishedAt: new Date().toISOString() // Approximate
         });
 
@@ -346,11 +346,11 @@ class PlaylistManager {
 
         await this.savePlaylistCache(playlistId, playlist);
       } else {
-        console.warn(`[WARN] Playlist not found for update: playlistId=${playlistId}, title="${title}", file=${cacheFile}`);
+        console.warn(`[WARN] Playlist not found for update: playlistId=${playlistId}, title="${playlistTitle}", file=${cacheFile}`);
       }
     } catch (error) {
       logVerbose(`Failed to update playlist cache for ${playlistId}: ${error}`);
-      console.error(`[ERROR] Exception in updatePlaylistCache for playlistId=${playlistId}, title="${title}":`, error);
+      console.error(`[ERROR] Exception in updatePlaylistCache for playlistId=${playlistId}, title="${playlistTitle}":`, error);
     }
   }
 
@@ -706,7 +706,7 @@ class PlaylistManager {
 
         // Update local cache on disk if not dryRun (use playlist title, not video title)
         if (result.success && !options.dryRun) {
-          await this.updatePlaylistCache(playlist.id, video.id, position, playlist.title);
+          await this.updatePlaylistCache(playlist.id, video.id, position, playlist.title, video.title);
         }
 
         assignment.assignedPlaylists.push({
@@ -1121,7 +1121,7 @@ async function main(): Promise<void> {
           // Calculate position
           const position = playlistManager["calculator"].calculatePosition(video.recordingDate || video.publishedAt, playlistCache.items);
           // Update cache
-          await playlistManager["updatePlaylistCache"](playlist.id, video.id, position, playlist.title);
+          await playlistManager["updatePlaylistCache"](playlist.id, video.id, position, playlist.title, video.title);
           getLogger().info(`[SIMULATE] Updated playlist cache for ${playlist.title} with video ${video.id}`);
         }
       }
