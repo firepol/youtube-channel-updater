@@ -548,3 +548,31 @@ tsx scripts/build-video-database.ts clean
 - If a video matches both "unlisted" and "private" keywords, the most restrictive privacy is used.
 - If a video is already public but should be unlisted/private, the script will downgrade its privacy.
 - Batch operations process each video according to these rules.
+
+## Playlist Management Enhancements (2025-07-17)
+
+### Playlist Selection
+- New option: `--list <value>`
+  - Accepts either a playlist title or playlist id.
+  - Smart detection: if value matches a playlist file (after sanitizing as filename), treat as title; else, check if it matches a playlist id in config; error if neither found.
+
+### Dry-Run and Output
+- `--dry-run` shows a preview, makes no changes.
+- `--output <file>`:
+  - For `--sort` and `--remove-duplicates`, saves before/after CSVs for comparison:
+    - `<output>-1-before.csv` (original order)
+    - `<output>-2-after.csv` (result)
+  - CSVs include: position, videoId, title, privacyStatus, recordingDate, publishedAt, lastUpdated
+
+### Logging
+- Always print a summary at the end (e.g., number of items before/after, duplicates removed, order changes).
+- For large lists, keep logs concise and focus on summary.
+
+### Workflow
+- `--fetch-items --list "..."` to fetch a specific playlist.
+- `--remove-duplicates --list "..." [--dry-run --output logs/foo.json]`
+- `--sort --list "..." [--dry-run --output logs/foo.json]`
+- `--orphans --list "..."` to assign orphans to a specific playlist.
+
+### No Backup Option
+- User will handle backups manually as needed.

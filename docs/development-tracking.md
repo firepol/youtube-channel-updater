@@ -293,3 +293,11 @@
 - 🔄 Updated `scripts/build-video-database.ts` to use `search.list` with `forMine: true` and OAuth for the authenticated user's own channel, allowing draft/unpublished videos to be included in the database.  
 - For other channels, or when OAuth is not used, the script continues to use the uploads playlist (published videos only).  
 - Improved documentation and comments in the script to clarify this logic.
+
+2025-07-17 10:55:00 🔄 In Progress
+- Planned and specified new playlist management features:
+  - Smart --list option (title or id)
+  - --dry-run and --output for before/after CSVs
+  - Summary logging for deduplication and sorting
+  - Documented workflow for fetch, deduplication, sorting, and orphan assignment
+- Updated specifications.md accordingly
