@@ -346,7 +346,8 @@ class PlaylistManager {
 
         await this.savePlaylistCache(playlistId, playlist);
       } else {
-        console.warn(`[WARN] Playlist not found for update: playlistId=${playlistId}, title="${playlistTitle}", file=${cacheFile}`);
+        console.error(`[ERROR] Playlist not found for update: playlistId=${playlistId}, title="${playlistTitle}", file=${cacheFile}`);
+        process.exit(1);
       }
     } catch (error) {
       logVerbose(`Failed to update playlist cache for ${playlistId}: ${error}`);
