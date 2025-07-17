@@ -1,6 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { PlaylistManager } from '../scripts/manage-playlists';
 import { LocalPlaylist, LocalPlaylistItem, PlaylistConfig } from '../src/types/api-types';
+import fs from 'fs-extra';
+import path from 'path';
 
 function createMockPlaylist(items: LocalPlaylistItem[]): LocalPlaylist {
   return {
@@ -65,5 +67,48 @@ describe('PlaylistManager.removeDuplicatesFromPlaylist', () => {
     const { newItems, removed } = playlistManager.removeDuplicatesFromPlaylist(playlist);
     expect(newItems.map(i => i.videoId)).toEqual(['a']);
     expect(removed.length).toBe(2);
+  });
+});
+
+// === CSV Export Utility Test ===
+import { exportPlaylistItemsToCsv } from '../scripts/manage-playlists';
+describe('exportPlaylistItemsToCsv', () => {
+  const tmp = path.join(__dirname, 'tmp-csv-test.csv');
+  const videoDbPath = path.join(__dirname, 'mock-videos.json');
+  const playlistItems: LocalPlaylistItem[] = [
+    { position: 0, videoId: 'a', title: 'A', publishedAt: '2022-01-01T00:00:00Z' },
+    { position: 1, videoId: 'b', title: 'B', publishedAt: '2022-01-02T00:00:00Z' },
+  ];
+  const videoDb = [
+    { id: 'a', privacyStatus: 'public', recordingDate: '2022-01-01T00:00:00Z', publishedAt: '2022-01-01T00:00:00Z', lastUpdated: '2022-01-05T00:00:00Z' },
+    { id: 'b', privacyStatus: 'private', recordingDate: '', publishedAt: '2022-01-02T00:00:00Z', lastUpdated: '2022-01-06T00:00:00Z' },
+  ];
+
+  beforeEach(async () => {
+    await fs.writeJson(videoDbPath, videoDb);
+  });
+  afterEach(async () => {
+    await fs.remove(tmp);
+    await fs.remove(videoDbPath);
+  });
+
+  it('exports playlist items to CSV with correct headers and data', async () => {
+    await exportPlaylistItemsToCsv(playlistItems, tmp, videoDbPath);
+    const csv = await fs.readFile(tmp, 'utf8');
+    expect(csv).toContain('position');
+    expect(csv).toContain('videoId');
+    expect(csv).toContain('title');
+    expect(csv).toContain('privacyStatus');
+    expect(csv).toContain('recordingDate');
+    expect(csv).toContain('publishedAt');
+    expect(csv).toContain('lastUpdated');
+    expect(csv).toContain('A');
+    expect(csv).toContain('B');
+    expect(csv).toContain('public');
+    expect(csv).toContain('private');
+    expect(csv).toContain('2022-01-01T00:00:00Z');
+    expect(csv).toContain('2022-01-02T00:00:00Z');
+    expect(csv).toContain('2022-01-05T00:00:00Z');
+    expect(csv).toContain('2022-01-06T00:00:00Z');
   });
 }); 

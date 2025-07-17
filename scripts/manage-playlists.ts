@@ -16,6 +16,44 @@ import { getLogger, logVerbose, initializeLogger } from '../src/utils/logger';
 import { VideoFilter, FilterRule } from './filter-videos';
 import { sanitizePlaylistName } from '../src/utils/playlist';
 
+// === CSV EXPORT UTILITY ===
+import { parse as json2csv } from 'json2csv';
+
+function getCsvOutputFilenames(base: string): { before: string; after: string } {
+  let out = base;
+  if (out.endsWith('.json')) out = out.replace(/\.json$/, '.csv');
+  if (!/\.(csv)$/i.test(out)) out = out + '.csv';
+  const before = out.replace(/(\.csv)$/i, '-1-before.csv');
+  const after = out.replace(/(\.csv)$/i, '-2-after.csv');
+  return { before, after };
+}
+
+async function exportPlaylistItemsToCsv(
+  items: LocalPlaylistItem[],
+  outputFile: string,
+  videoDbPath = 'data/videos.json'
+) {
+  let videoDb: Record<string, LocalVideo> = {};
+  try {
+    const db = await require('fs-extra').readJson(videoDbPath);
+    for (const v of db) videoDb[v.id] = v;
+  } catch (e) {}
+  const rows = items.map(item => {
+    const v = videoDb[item.videoId] || {};
+    return {
+      position: item.position,
+      videoId: item.videoId,
+      title: item.title,
+      privacyStatus: v.privacyStatus || '',
+      recordingDate: v.recordingDate || '',
+      publishedAt: v.publishedAt || item.publishedAt,
+      lastUpdated: v.lastUpdated || ''
+    };
+  });
+  const csv = json2csv(rows, { fields: ['position', 'videoId', 'title', 'privacyStatus', 'recordingDate', 'publishedAt', 'lastUpdated'] });
+  await require('fs-extra').writeFile(outputFile, csv, 'utf8');
+}
+
 interface PlaylistAssignment {
   videoId: string;
   title: string;
@@ -919,7 +957,7 @@ class PlaylistManager {
   }
 }
 
-export { PlaylistManager };
+export { PlaylistManager, exportPlaylistItemsToCsv };
 
 async function main(): Promise<void> {
   const program = new Command();
@@ -1251,6 +1289,7 @@ async function main(): Promise<void> {
         getLogger().error(`Playlist cache not found for ${targetPlaylist.title}`);
         process.exit(1);
       }
+      const originalItems = [...playlistCache.items];
       const sortedItems = playlistManager.sortPlaylistItems(playlistCache, sortField);
       getLogger().info(`Sorted playlist "${targetPlaylist.title}" by ${sortField}.`);
       if (options.dryRun) {
@@ -1258,12 +1297,26 @@ async function main(): Promise<void> {
         sortedItems.forEach((item, idx) => {
           getLogger().info(`  ${idx + 1}. ${item.title} (${item.publishedAt}) [${item.videoId}]`);
         });
+        if (options.output) {
+          const { before, after } = getCsvOutputFilenames(options.output);
+          await exportPlaylistItemsToCsv(originalItems, before);
+          await exportPlaylistItemsToCsv(sortedItems, after);
+          getLogger().info(`CSV output written: ${before}, ${after}`);
+        }
+        getLogger().info(`Summary: ${originalItems.length} items before, ${sortedItems.length} after. Order changes: ${originalItems.some((item, i) => item.videoId !== sortedItems[i]?.videoId) ? 'yes' : 'no'}`);
         return;
       }
       // Save sorted playlist
       playlistCache.items = sortedItems;
       await playlistManager["savePlaylistCache"](playlistCache.id, playlistCache);
       getLogger().info(`Saved sorted playlist cache for "${targetPlaylist.title}".`);
+      if (options.output) {
+        const { before, after } = getCsvOutputFilenames(options.output);
+        await exportPlaylistItemsToCsv(originalItems, before);
+        await exportPlaylistItemsToCsv(sortedItems, after);
+        getLogger().info(`CSV output written: ${before}, ${after}`);
+      }
+      getLogger().info(`Summary: ${originalItems.length} items before, ${sortedItems.length} after. Order changes: ${originalItems.some((item, i) => item.videoId !== sortedItems[i]?.videoId) ? 'yes' : 'no'}`);
       return;
     }
     // === END SORT LOGIC ===
@@ -1280,9 +1333,17 @@ async function main(): Promise<void> {
         getLogger().error(`Playlist cache not found for ${targetPlaylist.title}`);
         process.exit(1);
       }
+      const originalItems = [...playlistCache.items];
       const { newItems, removed } = playlistManager.removeDuplicatesFromPlaylist(playlistCache);
       if (removed.length === 0) {
         getLogger().info(`No duplicates found in playlist "${targetPlaylist.title}".`);
+        if (options.output) {
+          const { before, after } = getCsvOutputFilenames(options.output);
+          await exportPlaylistItemsToCsv(originalItems, before);
+          await exportPlaylistItemsToCsv(newItems, after);
+          getLogger().info(`CSV output written: ${before}, ${after}`);
+        }
+        getLogger().info(`Summary: ${originalItems.length} items before, ${newItems.length} after. Duplicates removed: 0`);
         return;
       }
       getLogger().info(`Found and removed ${removed.length} duplicate(s) from playlist "${targetPlaylist.title}".`);
@@ -1291,11 +1352,25 @@ async function main(): Promise<void> {
       });
       if (options.dryRun) {
         getLogger().info('[DRY RUN] No changes written.');
+        if (options.output) {
+          const { before, after } = getCsvOutputFilenames(options.output);
+          await exportPlaylistItemsToCsv(originalItems, before);
+          await exportPlaylistItemsToCsv(newItems, after);
+          getLogger().info(`CSV output written: ${before}, ${after}`);
+        }
+        getLogger().info(`Summary: ${originalItems.length} items before, ${newItems.length} after. Duplicates removed: ${removed.length}`);
         return;
       }
       playlistCache.items = newItems;
       await playlistManager["savePlaylistCache"](playlistCache.id, playlistCache);
       getLogger().info(`Saved playlist cache for "${targetPlaylist.title}" with duplicates removed.`);
+      if (options.output) {
+        const { before, after } = getCsvOutputFilenames(options.output);
+        await exportPlaylistItemsToCsv(originalItems, before);
+        await exportPlaylistItemsToCsv(newItems, after);
+        getLogger().info(`CSV output written: ${before}, ${after}`);
+      }
+      getLogger().info(`Summary: ${originalItems.length} items before, ${newItems.length} after. Duplicates removed: ${removed.length}`);
       return;
     }
     // === END REMOVE DUPLICATES LOGIC ===
