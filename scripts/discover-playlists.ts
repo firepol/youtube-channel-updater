@@ -247,20 +247,24 @@ class PlaylistDiscoverer {
             if (fetchItems) {
               try {
                 let pageToken: string | undefined = undefined;
+                let position = 0;
                 do {
                   const playlistItemsResponse = await this.youtubeClient.getPlaylistItems(playlist.id, pageToken);
                   if (playlistItemsResponse && playlistItemsResponse.items) {
                     items.push(...playlistItemsResponse.items.map((item: any, index: number) => ({
-                      position: items.length + index,
+                      playlistItemId: item.id, // Store the YouTube playlist item ID
+                      position: position + index,
                       videoId: item.resourceId.videoId,
                       title: item.title,
-                      publishedAt: item.publishedAt
+                      publishedAt: item.publishedAt,
+                      // Add any other relevant metadata here
                     })));
+                    position += playlistItemsResponse.items.length;
                   }
                   pageToken = playlistItemsResponse.nextPageToken;
                 } while (pageToken);
-              } catch (error) {
-                this.logger.error(`Failed to fetch items for playlist ${playlist.title}`, error as Error);
+              } catch (err) {
+                this.logger.error(`Failed to fetch playlist items for ${playlist.title}:`, err as Error);
               }
             }
             // Create or update playlist file:
