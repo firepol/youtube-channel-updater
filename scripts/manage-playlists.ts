@@ -1518,15 +1518,17 @@ async function main(): Promise<void> {
       // CSV export: after (final order)
       if (options.output) {
         const { after } = getCsvOutputFilenames(options.output);
+        // DRY RUN: afterItems is YouTubePlaylistItem[]
         if (options.dryRun && afterItems) {
           await exportPlaylistItemsToCsv(afterItems.map(item => ({
             position: item.position,
-            videoId: item.resourceId ? item.resourceId.videoId : '',
+            videoId: item.resourceId.videoId,
             title: item.title,
             publishedAt: item.publishedAt
           })), after);
           getLogger().info(`CSV output written: ${after}`);
         }
+        // LIVE: playlistCache.items is LocalPlaylistItem[]
         if (!options.dryRun) {
           await exportPlaylistItemsToCsv(playlistCache.items.map(item => ({
             position: item.position,
