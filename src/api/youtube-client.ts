@@ -682,6 +682,45 @@ export class YouTubeClient {
   }
 
   /**
+   * Update the position of an existing playlist item
+   * @param playlistItemId The ID of the playlist item to move
+   * @param position The new position for the item
+   * @returns The updated playlist item
+   */
+  async updatePlaylistItemPosition(
+    playlistItemId: string,
+    position: number
+  ): Promise<YouTubePlaylistItem> {
+    return this.executeApiCall(
+      async () => {
+        // First, fetch the current playlist item to get its snippet
+        const getResp = await this.youtube.playlistItems.list({
+          auth: this.oauth2Client,
+          part: ['snippet'],
+          id: [playlistItemId]
+        });
+        const item = getResp.data.items?.[0];
+        if (!item) {
+          throw new Error(`Playlist item not found: ${playlistItemId}`);
+        }
+        // Update the position in the snippet
+        const snippet = { ...item.snippet, position };
+        const updateResp = await this.youtube.playlistItems.update({
+          auth: this.oauth2Client,
+          part: ['snippet'],
+          requestBody: {
+            id: playlistItemId,
+            snippet
+          }
+        });
+        return updateResp.data as YouTubePlaylistItem;
+      },
+      50, // High cost for playlist operations
+      'updatePlaylistItemPosition'
+    );
+  }
+
+  /**
    * Get current rate limit information
    */
   getRateLimitInfo(): RateLimitInfo {

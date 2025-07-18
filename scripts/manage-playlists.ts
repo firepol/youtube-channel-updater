@@ -1304,46 +1304,112 @@ async function main(): Promise<void> {
         getLogger().error('You must specify --list <playlist> to sort a specific playlist.');
         process.exit(1);
       }
-      // Load playlist cache
+      // Fetch current playlist items from YouTube (live)
+      const playlistItemsResponse = await youtubeClient.getPlaylistItems(targetPlaylist.id);
+      const liveItems = playlistItemsResponse.items;
+      if (!liveItems || liveItems.length === 0) {
+        getLogger().error(`No items found in playlist on YouTube: ${targetPlaylist.title}`);
+        process.exit(1);
+      }
+      // CSV export: before
+      if (options.output) {
+        const { before } = getCsvOutputFilenames(options.output);
+        await exportPlaylistItemsToCsv(liveItems.map(item => ({
+          position: item.position,
+          videoId: item.resourceId.videoId,
+          title: item.title,
+          publishedAt: item.publishedAt
+        })), before);
+        getLogger().info(`CSV output written: ${before}`);
+      }
+      // Build desired order (sorted)
+      // Use the same logic as sortPlaylistItems, but operate on liveItems
+      let videoDb: Record<string, { recordingDate?: string; publishedAt: string }> = {};
+      try {
+        const db = await fs.readJson('data/videos.json');
+        for (const v of db) {
+          videoDb[v.id] = { recordingDate: v.recordingDate, publishedAt: v.publishedAt };
+        }
+      } catch (e) {
+        videoDb = {};
+      }
+      let sortedItems: typeof liveItems;
+      if (sortField === 'title') {
+        sortedItems = [...liveItems].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+      } else {
+        sortedItems = [...liveItems].sort((a, b) => {
+          const aDate = videoDb[a.resourceId.videoId]?.recordingDate || videoDb[a.resourceId.videoId]?.publishedAt || a.publishedAt;
+          const bDate = videoDb[b.resourceId.videoId]?.recordingDate || videoDb[b.resourceId.videoId]?.publishedAt || b.publishedAt;
+          return new Date(aDate).getTime() - new Date(bDate).getTime();
+        });
+      }
+      // Compute minimal set of moves (greedy: for each position, if not correct, move it)
+      const moves: Array<{playlistItemId: string, from: number, to: number, title: string}> = [];
+      let currentOrder = [...liveItems];
+      for (let i = 0; i < sortedItems.length; i++) {
+        if (currentOrder[i].playlistId !== sortedItems[i].playlistId || currentOrder[i].resourceId.videoId !== sortedItems[i].resourceId.videoId) {
+          // Find the item that should be at position i
+          const correctIdx = currentOrder.findIndex(item => item.resourceId.videoId === sortedItems[i].resourceId.videoId);
+          if (correctIdx !== -1 && correctIdx !== i) {
+            moves.push({
+              playlistItemId: currentOrder[correctIdx].id,
+              from: correctIdx,
+              to: i,
+              title: currentOrder[correctIdx].title
+            });
+            // Move the item in the local array
+            const [moved] = currentOrder.splice(correctIdx, 1);
+            currentOrder.splice(i, 0, moved);
+          }
+        }
+      }
+      // CSV export: after (planned order)
+      if (options.output) {
+        const { after } = getCsvOutputFilenames(options.output);
+        await exportPlaylistItemsToCsv(sortedItems.map(item => ({
+          position: item.position,
+          videoId: item.resourceId.videoId,
+          title: item.title,
+          publishedAt: item.publishedAt
+        })), after);
+        getLogger().info(`CSV output written: ${after}`);
+      }
+      if (options.dryRun) {
+        getLogger().info(`[DRY RUN] Would perform the following moves to sort playlist '${targetPlaylist.title}' by ${sortField}:`);
+        moves.forEach(move => {
+          getLogger().info(`  Move '${move.title}' from position ${move.from} to ${move.to}`);
+        });
+        getLogger().info(`[DRY RUN] Total moves: ${moves.length}`);
+        return;
+      }
+      // Load playlist cache for updating after each move
       const playlistCache = await playlistManager["loadPlaylistCache"](targetPlaylist.id, targetPlaylist.title);
       if (!playlistCache) {
         getLogger().error(`Playlist cache not found for ${targetPlaylist.title}`);
         process.exit(1);
       }
-      const originalItems = [...playlistCache.items];
-      const sortedItems = playlistManager.sortPlaylistItems(playlistCache, sortField);
-      getLogger().info(`Sorted playlist "${targetPlaylist.title}" by ${sortField}.`);
-      if (options.dryRun) {
-        getLogger().info('[DRY RUN] Sorted order:');
-        sortedItems.forEach((item, idx) => {
-          getLogger().info(`  ${idx + 1}. ${item.title} (${item.publishedAt}) [${item.videoId}]`);
-        });
-        if (options.output) {
-          const { before, after } = getCsvOutputFilenames(options.output);
-          await exportPlaylistItemsToCsv(originalItems, before);
-          await exportPlaylistItemsToCsv(sortedItems, after);
-          getLogger().info(`CSV output written: ${before}, ${after}`);
+      // Perform each move via API, update cache after each
+      for (const move of moves) {
+        try {
+          getLogger().info(`Moving '${move.title}' from position ${move.from} to ${move.to} (playlistItemId=${move.playlistItemId})`);
+          await youtubeClient.updatePlaylistItemPosition(move.playlistItemId, move.to);
+          // Update local cache: move the item in playlistCache.items
+          const idx = playlistCache.items.findIndex(item => item.videoId === liveItems[move.from].resourceId.videoId);
+          if (idx !== -1) {
+            const [moved] = playlistCache.items.splice(idx, 1);
+            playlistCache.items.splice(move.to, 0, moved);
+            // Re-assign positions
+            playlistCache.items.forEach((item, i) => (item.position = i));
+            await playlistManager["savePlaylistCache"](playlistCache.id, playlistCache, false);
+            getLogger().info(`Updated and saved local cache after move.`);
+          }
+        } catch (err) {
+          getLogger().error(`Failed to move item: ${err}`);
+          getLogger().error(`Stopping further moves. Playlist cache is up to date with last successful move.`);
+          process.exit(1);
         }
-        getLogger().info(`Summary: ${originalItems.length} items before, ${sortedItems.length} after. Order changes: ${originalItems.some((item, i) => item.videoId !== sortedItems[i]?.videoId) ? 'yes' : 'no'}`);
-        return;
       }
-      // Save sorted playlist (only if not dry-run)
-      logVerbose(`[SORT] dryRun=${options.dryRun} - About to assign sortedItems to playlistCache.items and write file`);
-      if (!options.dryRun) {
-        logVerbose(`[SORT] Actually assigning sortedItems and writing file`);
-        playlistCache.items = sortedItems;
-        try { await playlistManager["savePlaylistCache"](playlistCache.id, playlistCache, false); } catch (err) { getLogger().error(`Failed to write playlist cache: ${err}`); throw err; }
-        getLogger().info(`Saved sorted playlist cache for "${targetPlaylist.title}".`);
-      } else {
-        logVerbose(`[SORT] Skipping assignment and file write due to dryRun`);
-      }
-      if (options.output) {
-        const { before, after } = getCsvOutputFilenames(options.output);
-        await exportPlaylistItemsToCsv(originalItems, before);
-        await exportPlaylistItemsToCsv(sortedItems, after);
-        getLogger().info(`CSV output written: ${before}, ${after}`);
-      }
-      getLogger().info(`Summary: ${originalItems.length} items before, ${sortedItems.length} after. Order changes: ${originalItems.some((item, i) => item.videoId !== sortedItems[i]?.videoId) ? 'yes' : 'no'}`);
+      getLogger().info(`Finished sorting playlist '${targetPlaylist.title}'. Total moves: ${moves.length}`);
       return;
     }
     // === END SORT LOGIC ===
@@ -1354,54 +1420,124 @@ async function main(): Promise<void> {
         getLogger().error('You must specify --list <playlist> to remove duplicates from a specific playlist.');
         process.exit(1);
       }
-      // Load playlist cache
-      const playlistCache = await playlistManager["loadPlaylistCache"](targetPlaylist.id, targetPlaylist.title);
+      // Fetch current playlist items from YouTube (live)
+      const playlistItemsResponse = await youtubeClient.getPlaylistItems(targetPlaylist.id);
+      const liveItems = playlistItemsResponse.items;
+      if (!liveItems || liveItems.length === 0) {
+        getLogger().error(`No items found in playlist on YouTube: ${targetPlaylist.title}`);
+        process.exit(1);
+      }
+      // CSV export: before
+      if (options.output) {
+        const { before } = getCsvOutputFilenames(options.output);
+        await exportPlaylistItemsToCsv(liveItems.map(item => ({
+          position: item.position,
+          videoId: item.resourceId.videoId,
+          title: item.title,
+          publishedAt: item.publishedAt
+        })), before);
+        getLogger().info(`CSV output written: ${before}`);
+      }
+      // Identify duplicates (by videoId, keep the first occurrence)
+      const seen = new Set<string>();
+      const duplicates: Array<{playlistItemId: string, videoId: string, title: string, position: number}> = [];
+      liveItems.forEach((item, idx) => {
+        if (seen.has(item.resourceId.videoId)) {
+          duplicates.push({
+            playlistItemId: item.id,
+            videoId: item.resourceId.videoId,
+            title: item.title,
+            position: idx
+          });
+        } else {
+          seen.add(item.resourceId.videoId);
+        }
+      });
+      // CSV export: after (planned order)
+      let afterItems;
+      if (options.dryRun) {
+        // Simulate removals: remove all duplicates from a copy of liveItems
+        const seenSim = new Set<string>();
+        afterItems = liveItems.filter(item => {
+          if (seenSim.has(item.resourceId.videoId)) return false;
+          seenSim.add(item.resourceId.videoId);
+          return true;
+        });
+      } else {
+        // After live removals, afterItems will be the playlistCache.items (updated after each removal)
+        // We'll export after the loop
+      }
+      if (options.output && afterItems) {
+        const { after } = getCsvOutputFilenames(options.output);
+        await exportPlaylistItemsToCsv(afterItems.map(item => ({
+          position: item.position,
+          videoId: item.resourceId ? item.resourceId.videoId : item.videoId,
+          title: item.title,
+          publishedAt: item.publishedAt
+        })), after);
+        getLogger().info(`CSV output written: ${after}`);
+      }
+      if (duplicates.length === 0) {
+        getLogger().info(`No duplicates found in playlist "${targetPlaylist.title}".`);
+        return;
+      }
+      if (options.dryRun) {
+        getLogger().info(`[DRY RUN] Would remove the following duplicates from playlist '${targetPlaylist.title}':`);
+        duplicates.forEach(dup => {
+          getLogger().info(`  Remove '${dup.title}' (videoId=${dup.videoId}) at position ${dup.position} (playlistItemId=${dup.playlistItemId})`);
+        });
+        getLogger().info(`[DRY RUN] Total duplicates: ${duplicates.length}`);
+        return;
+      }
+      // Load playlist cache for updating after each removal
+      const playlistCache = await playlistManager["loadPlaylistCache"](targetPlaylist.id, targetPlaylist.title) as import('../src/types/api-types').LocalPlaylist;
       if (!playlistCache) {
         getLogger().error(`Playlist cache not found for ${targetPlaylist.title}`);
         process.exit(1);
       }
-      const originalItems = [...playlistCache.items];
-      const { newItems, removed } = playlistManager.removeDuplicatesFromPlaylist(playlistCache);
-      if (removed.length === 0) {
-        getLogger().info(`No duplicates found in playlist "${targetPlaylist.title}".`);
-        if (options.output) {
-          const { before, after } = getCsvOutputFilenames(options.output);
-          await exportPlaylistItemsToCsv(originalItems, before);
-          await exportPlaylistItemsToCsv(newItems, after);
-          getLogger().info(`CSV output written: ${before}, ${after}`);
+      // Remove each duplicate via API, update cache after each
+      for (const dup of duplicates) {
+        try {
+          getLogger().info(`Removing duplicate '${dup.title}' (videoId=${dup.videoId}) at position ${dup.position} (playlistItemId=${dup.playlistItemId})`);
+          await youtubeClient.removeFromPlaylist(dup.playlistItemId);
+          // Update local cache: remove the item from playlistCache.items
+          const idx = playlistCache.items.findIndex(item => item.videoId === dup.videoId && item.position === dup.position);
+          if (idx !== -1) {
+            playlistCache.items.splice(idx, 1);
+            // Re-assign positions
+            playlistCache.items.forEach((item, i) => (item.position = i));
+            await playlistManager["savePlaylistCache"](playlistCache.id, playlistCache, false);
+            getLogger().info(`Updated and saved local cache after removal.`);
+          }
+        } catch (err) {
+          getLogger().error(`Failed to remove duplicate: ${err}`);
+          getLogger().error(`Stopping further removals. Playlist cache is up to date with last successful removal.`);
+          process.exit(1);
         }
-        getLogger().info(`Summary: ${originalItems.length} items before, ${newItems.length} after. Duplicates removed: 0`);
-        return;
       }
-      getLogger().info(`Found and removed ${removed.length} duplicate(s) from playlist "${targetPlaylist.title}".`);
-      removed.forEach(item => {
-        getLogger().info(`  Removed: ${item.title} (${item.publishedAt}) [${item.videoId}] at position ${item.position}`);
-      });
-      logVerbose(`[REMOVE-DUPES] dryRun=${options.dryRun} - About to assign newItems to playlistCache.items and write file`);
-      if (options.dryRun) {
-        logVerbose(`[REMOVE-DUPES] Skipping assignment and file write due to dryRun`);
-        getLogger().info('[DRY RUN] No changes written.');
-        if (options.output) {
-          const { before, after } = getCsvOutputFilenames(options.output);
-          await exportPlaylistItemsToCsv(originalItems, before);
-          await exportPlaylistItemsToCsv(newItems, after);
-          getLogger().info(`CSV output written: ${before}, ${after}`);
-        }
-        getLogger().info(`Summary: ${originalItems.length} items before, ${newItems.length} after. Duplicates removed: ${removed.length}`);
-        return;
-      }
-      logVerbose(`[REMOVE-DUPES] Actually assigning newItems and writing file`);
-      // Save playlist cache with duplicates removed (only if not dry-run)
-      playlistCache.items = newItems;
-      try { await playlistManager["savePlaylistCache"](playlistCache.id, playlistCache, false); } catch (err) { getLogger().error(`Failed to write playlist cache: ${err}`); throw err; }
-      getLogger().info(`Saved playlist cache for "${targetPlaylist.title}" with duplicates removed.`);
+      // CSV export: after (final order)
       if (options.output) {
-        const { before, after } = getCsvOutputFilenames(options.output);
-        await exportPlaylistItemsToCsv(originalItems, before);
-        await exportPlaylistItemsToCsv(newItems, after);
-        getLogger().info(`CSV output written: ${before}, ${after}`);
+        const { after } = getCsvOutputFilenames(options.output);
+        if (options.dryRun && afterItems) {
+          await exportPlaylistItemsToCsv(afterItems.map(item => ({
+            position: item.position,
+            videoId: item.resourceId ? item.resourceId.videoId : '',
+            title: item.title,
+            publishedAt: item.publishedAt
+          })), after);
+          getLogger().info(`CSV output written: ${after}`);
+        }
+        if (!options.dryRun) {
+          await exportPlaylistItemsToCsv(playlistCache.items.map(item => ({
+            position: item.position,
+            videoId: item.videoId,
+            title: item.title,
+            publishedAt: item.publishedAt
+          })), after);
+          getLogger().info(`CSV output written: ${after}`);
+        }
       }
-      getLogger().info(`Summary: ${originalItems.length} items before, ${newItems.length} after. Duplicates removed: ${removed.length}`);
+      getLogger().info(`Finished removing duplicates from playlist '${targetPlaylist.title}'. Total removed: ${duplicates.length}`);
       return;
     }
     // === END REMOVE DUPLICATES LOGIC ===
