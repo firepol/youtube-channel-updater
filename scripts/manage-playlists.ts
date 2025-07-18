@@ -1471,7 +1471,7 @@ async function main(): Promise<void> {
         const { after } = getCsvOutputFilenames(options.output);
         await exportPlaylistItemsToCsv(afterItems.map(item => ({
           position: item.position,
-          videoId: item.resourceId ? item.resourceId.videoId : item.videoId,
+          videoId: item.resourceId.videoId,
           title: item.title,
           publishedAt: item.publishedAt
         })), after);
