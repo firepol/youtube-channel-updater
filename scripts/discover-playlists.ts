@@ -246,15 +246,19 @@ class PlaylistDiscoverer {
             let items: any[] = [];
             if (fetchItems) {
               try {
-                const playlistItemsResponse = await this.youtubeClient.getPlaylistItems(playlist.id);
-                if (playlistItemsResponse && playlistItemsResponse.items) {
-                  items = playlistItemsResponse.items.map((item: any, index: number) => ({
-                    position: index,
-                    videoId: item.resourceId.videoId,
-                    title: item.title,
-                    publishedAt: item.publishedAt
-                  }));
-                }
+                let pageToken: string | undefined = undefined;
+                do {
+                  const playlistItemsResponse = await this.youtubeClient.getPlaylistItems(playlist.id, pageToken);
+                  if (playlistItemsResponse && playlistItemsResponse.items) {
+                    items.push(...playlistItemsResponse.items.map((item: any, index: number) => ({
+                      position: items.length + index,
+                      videoId: item.resourceId.videoId,
+                      title: item.title,
+                      publishedAt: item.publishedAt
+                    })));
+                  }
+                  pageToken = playlistItemsResponse.nextPageToken;
+                } while (pageToken);
               } catch (error) {
                 this.logger.error(`Failed to fetch items for playlist ${playlist.title}`, error as Error);
               }
