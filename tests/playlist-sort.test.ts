@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import fs from 'fs-extra';
 import { PlaylistManager } from '../scripts/manage-playlists';
 import { LocalPlaylist, LocalPlaylistItem, PlaylistConfig } from '../src/types/api-types';
+import { exportPlaylistItemsToCsv } from '../scripts/manage-playlists';
+import path from 'path';
 
 // Helper to create mock playlist data
 function createMockPlaylist(items: LocalPlaylistItem[]): LocalPlaylist {
@@ -93,5 +95,50 @@ describe('PlaylistManager.sortPlaylistItems', () => {
     // Should fallback to publishedAt
     expect(sorted[0].videoId).toBe('b');
     expect(sorted[1].videoId).toBe('a');
+  });
+});
+
+describe('Playlist CSV before/after order', () => {
+  const tmpBefore = path.join(__dirname, 'tmp-csv-before.csv');
+  const tmpAfter = path.join(__dirname, 'tmp-csv-after.csv');
+  const videoDbPath = path.join(__dirname, 'mock-videos-csv.json');
+
+  const playlistItems: LocalPlaylistItem[] = [
+    { position: 2, videoId: 'c', title: 'C', publishedAt: '2022-01-03T00:00:00Z' },
+    { position: 0, videoId: 'a', title: 'A', publishedAt: '2022-01-01T00:00:00Z' },
+    { position: 1, videoId: 'b', title: 'B', publishedAt: '2022-01-02T00:00:00Z' },
+  ];
+  const videoDb = [
+    { id: 'a', privacyStatus: 'public', recordingDate: '2022-01-01T00:00:00Z', publishedAt: '2022-01-01T00:00:00Z', lastUpdated: '2022-01-05T00:00:00Z' },
+    { id: 'b', privacyStatus: 'private', recordingDate: '', publishedAt: '2022-01-02T00:00:00Z', lastUpdated: '2022-01-06T00:00:00Z' },
+    { id: 'c', privacyStatus: 'unlisted', recordingDate: '', publishedAt: '2022-01-03T00:00:00Z', lastUpdated: '2022-01-07T00:00:00Z' },
+  ];
+
+  beforeEach(async () => {
+    await fs.writeJson(videoDbPath, videoDb);
+  });
+  afterEach(async () => {
+    await fs.remove(tmpBefore);
+    await fs.remove(tmpAfter);
+    await fs.remove(videoDbPath);
+  });
+
+  it('exports before and after CSVs with correct order', async () => {
+    // Export before (original order)
+    await exportPlaylistItemsToCsv(playlistItems, tmpBefore, videoDbPath);
+    // Export after (sorted by publishedAt ascending)
+    const sorted = [...playlistItems].sort((a, b) => new Date(a.publishedAt).getTime() - new Date(b.publishedAt).getTime());
+    await exportPlaylistItemsToCsv(sorted, tmpAfter, videoDbPath);
+
+    const csvBefore = await fs.readFile(tmpBefore, 'utf8');
+    const csvAfter = await fs.readFile(tmpAfter, 'utf8');
+    // Helper to extract videoIds in order from CSV
+    const getOrder = (csv: string) => csv.split('\n').slice(1).filter(Boolean).map(line => line.split(',')[1].replace(/"/g, ''));
+    const beforeOrder = getOrder(csvBefore);
+    const afterOrder = getOrder(csvAfter);
+    // The before order should match the original playlistItems order
+    expect(beforeOrder).toEqual(['c', 'a', 'b']);
+    // The after order should be sorted by publishedAt
+    expect(afterOrder).toEqual(['a', 'b', 'c']);
   });
 }); 

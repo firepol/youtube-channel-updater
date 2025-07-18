@@ -308,7 +308,7 @@ class PlaylistManager {
   /**
    * Refresh playlist cache from YouTube API
    */
-  private async refreshPlaylistCache(playlistId: string): Promise<LocalPlaylist | null> {
+  private async refreshPlaylistCache(playlistId: string, dryRun = false): Promise<LocalPlaylist | null> {
     try {
       // Get playlist details from playlists API
       const playlistsResponse = await this.youtubeClient.getPlaylists();
@@ -340,8 +340,10 @@ class PlaylistManager {
         items
       };
 
-      // Save to cache
-      await this.savePlaylistCache(playlistId, playlist);
+      // Save to cache only if not dry-run
+      if (!dryRun) {
+        await this.savePlaylistCache(playlistId, playlist, false);
+      }
       return playlist;
 
     } catch (error) {
@@ -353,14 +355,11 @@ class PlaylistManager {
   /**
    * Save playlist cache to local file
    */
-  private async savePlaylistCache(playlistId: string, playlist: LocalPlaylist): Promise<void> {
-    try {
-      await fs.ensureDir(this.playlistsDir);
-      const cacheFile = path.join(this.playlistsDir, `${sanitizePlaylistName(playlist.title)}.json`);
-      await fs.writeJson(cacheFile, playlist, { spaces: 2 });
-    } catch (error) {
-      logVerbose(`Failed to save playlist cache for ${playlistId}: ${error}`);
-    }
+  private async savePlaylistCache(playlistId: string, playlist: LocalPlaylist, dryRun = false): Promise<void> {
+    if (dryRun) return;
+    await fs.ensureDir(this.playlistsDir);
+    const cacheFile = path.join(this.playlistsDir, `${sanitizePlaylistName(playlist.title)}.json`);
+    await fs.writeJson(cacheFile, playlist, { spaces: 2 });
   }
 
   /**
@@ -686,7 +685,7 @@ class PlaylistManager {
         let playlistCache = await this.loadPlaylistCache(playlist.id, playlist.title);
         
         if (!playlistCache || options.refreshCache) {
-          playlistCache = await this.refreshPlaylistCache(playlist.id);
+          playlistCache = await this.refreshPlaylistCache(playlist.id, options.dryRun);
         }
 
         if (!playlistCache) {
@@ -987,7 +986,7 @@ async function main(): Promise<void> {
     .option('--sort <field>', 'Sort playlist items by "date" (default) or "title"')
     .option('--remove-duplicates', 'Remove duplicate videos from the specified playlist (requires --list)')
     .option('-h, --help', 'Show help information')
-    .parse();
+    .parse(process.argv);
 
   const options: ProcessingOptions = {
     input: program.opts().input,
@@ -1014,6 +1013,25 @@ async function main(): Promise<void> {
     removeDuplicates: program.opts().removeDuplicates || false
   };
 
+  // Fallback: if --dry-run is present in process.argv but options.dryRun is false, force it true
+  if (!options.dryRun && process.argv.includes('--dry-run')) {
+    options.dryRun = true;
+    logVerbose('[BOOT] Fallback: --dry-run found in process.argv, forcing dryRun=true');
+  }
+
+  // Log parsed options and argv for debugging
+  logVerbose(`[BOOT] Parsed options: ${JSON.stringify(options)}`);
+  logVerbose(`[BOOT] process.argv: ${JSON.stringify(process.argv)}`);
+
+  // Fallback: if options.list is not set but --list is present in process.argv, extract the value
+  if (!options.list) {
+    const listIdx = process.argv.indexOf('--list');
+    if (listIdx !== -1 && process.argv.length > listIdx + 1) {
+      options.list = process.argv[listIdx + 1];
+      logVerbose(`[BOOT] Fallback: --list found in process.argv, setting options.list to '${options.list}'`);
+    }
+  }
+
   // Check if help was requested
   if (program.opts().help) {
     return;
@@ -1026,12 +1044,15 @@ async function main(): Promise<void> {
   try {
     // Load configuration
     const config = await loadConfig();
+    const forceVerbose = process.env.VERBOSE === 'true';
+    logVerbose(`[BOOT] process.env.VERBOSE=${process.env.VERBOSE}, forceVerbose=${forceVerbose}`);
     // Initialize logger
     initializeLogger({
-      verbose: config.app.verbose,
-      logLevel: config.app.logLevel as any,
+      verbose: forceVerbose ? true : config.app.verbose,
+      logLevel: forceVerbose ? 'verbose' : config.app.logLevel as any,
       logsDir: config.paths.logsDir
     });
+    logVerbose(`[BOOT] Logger initialized with verbose=${forceVerbose ? true : config.app.verbose}, logLevel=${forceVerbose ? 'verbose' : config.app.logLevel}`);
     const youtubeClient = new YouTubeClient(
       config.youtube.apiKey,
       config.youtube.clientId,
@@ -1306,10 +1327,16 @@ async function main(): Promise<void> {
         getLogger().info(`Summary: ${originalItems.length} items before, ${sortedItems.length} after. Order changes: ${originalItems.some((item, i) => item.videoId !== sortedItems[i]?.videoId) ? 'yes' : 'no'}`);
         return;
       }
-      // Save sorted playlist
-      playlistCache.items = sortedItems;
-      await playlistManager["savePlaylistCache"](playlistCache.id, playlistCache);
-      getLogger().info(`Saved sorted playlist cache for "${targetPlaylist.title}".`);
+      // Save sorted playlist (only if not dry-run)
+      logVerbose(`[SORT] dryRun=${options.dryRun} - About to assign sortedItems to playlistCache.items and write file`);
+      if (!options.dryRun) {
+        logVerbose(`[SORT] Actually assigning sortedItems and writing file`);
+        playlistCache.items = sortedItems;
+        try { await playlistManager["savePlaylistCache"](playlistCache.id, playlistCache, false); } catch (err) { getLogger().error(`Failed to write playlist cache: ${err}`); throw err; }
+        getLogger().info(`Saved sorted playlist cache for "${targetPlaylist.title}".`);
+      } else {
+        logVerbose(`[SORT] Skipping assignment and file write due to dryRun`);
+      }
       if (options.output) {
         const { before, after } = getCsvOutputFilenames(options.output);
         await exportPlaylistItemsToCsv(originalItems, before);
@@ -1350,7 +1377,9 @@ async function main(): Promise<void> {
       removed.forEach(item => {
         getLogger().info(`  Removed: ${item.title} (${item.publishedAt}) [${item.videoId}] at position ${item.position}`);
       });
+      logVerbose(`[REMOVE-DUPES] dryRun=${options.dryRun} - About to assign newItems to playlistCache.items and write file`);
       if (options.dryRun) {
+        logVerbose(`[REMOVE-DUPES] Skipping assignment and file write due to dryRun`);
         getLogger().info('[DRY RUN] No changes written.');
         if (options.output) {
           const { before, after } = getCsvOutputFilenames(options.output);
@@ -1361,8 +1390,10 @@ async function main(): Promise<void> {
         getLogger().info(`Summary: ${originalItems.length} items before, ${newItems.length} after. Duplicates removed: ${removed.length}`);
         return;
       }
+      logVerbose(`[REMOVE-DUPES] Actually assigning newItems and writing file`);
+      // Save playlist cache with duplicates removed (only if not dry-run)
       playlistCache.items = newItems;
-      await playlistManager["savePlaylistCache"](playlistCache.id, playlistCache);
+      try { await playlistManager["savePlaylistCache"](playlistCache.id, playlistCache, false); } catch (err) { getLogger().error(`Failed to write playlist cache: ${err}`); throw err; }
       getLogger().info(`Saved playlist cache for "${targetPlaylist.title}" with duplicates removed.`);
       if (options.output) {
         const { before, after } = getCsvOutputFilenames(options.output);

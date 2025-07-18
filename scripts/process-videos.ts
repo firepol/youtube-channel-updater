@@ -1137,7 +1137,7 @@ async function main(): Promise<void> {
     .option('--publish', 'Publish filtered videos by setting privacyStatus to public and madeForKids to false')
     .option('--csv <file>', 'Output file for CSV results');
 
-  program.parse();
+  program.parse(process.argv);
 
   const options: ProcessingOptions & { publish?: boolean } = program.opts();
   
