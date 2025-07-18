@@ -216,22 +216,22 @@ class VideoDatabaseBuilder {
   private extractOriginalFileDate(video: YouTubeVideo): string | undefined {
     // Helper to parse date/time from a string
     function parseDateTime(str: string): string | undefined {
-      // Good format: 2025-06-23 09:17 or 2025-06-23 09:17:03
-      const good = str.match(/(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)/);
+      // Good format: 2025-07-04 22:01 or 2025-07-04 22:01:15
+      const good = str.match(/(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
       if (good) {
-        // Return as ISO string
-        const iso = new Date(`${good[1]}T${good[2]}`).toISOString();
-        return iso;
+        const date = good[1];
+        const hour = good[2];
+        const min = good[3];
+        const sec = good[4] || '00';
+        // Compose ISO string manually, always append Z
+        return `${date}T${hour}:${min}:${sec}Z`;
       }
-      // Bad format: 2025 06 23   09 17 03 06 (year month day hour min sec ms)
+      // Bad format: 2025 07 04   22 01 15 06 (year month day hour min sec ms)
       const bad = str.match(/(\d{4})[ .-]?(\d{2})[ .-]?(\d{2})\s+(\d{2})[ .-]?(\d{2})[ .-]?(\d{2})(?:[ .-]?(\d{2,3}))?/);
       if (bad) {
-        // Pad ms if present
-        const ms = bad[7] ? bad[7].padEnd(3, '0') : '000';
-        // Compose ISO string
-        const iso = `${bad[1]}-${bad[2]}-${bad[3]}T${bad[4]}:${bad[5]}:${bad[6]}.${ms}Z`;
-        // Validate date
-        if (!isNaN(Date.parse(iso))) return iso;
+        const ms = bad[7] ? bad[7].padEnd(3, '0') : undefined;
+        const iso = `${bad[1]}-${bad[2]}-${bad[3]}T${bad[4]}:${bad[5]}:${bad[6]}` + (ms ? `.${ms}` : '') + 'Z';
+        return iso;
       }
       return undefined;
     }
