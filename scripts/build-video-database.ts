@@ -211,6 +211,48 @@ class VideoDatabaseBuilder {
   }
 
   /**
+   * Extract original file date (with time) from title or description
+   */
+  private extractOriginalFileDate(video: YouTubeVideo): string | undefined {
+    // Helper to parse date/time from a string
+    function parseDateTime(str: string): string | undefined {
+      // Good format: 2025-06-23 09:17 or 2025-06-23 09:17:03
+      const good = str.match(/(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)/);
+      if (good) {
+        // Return as ISO string
+        const iso = new Date(`${good[1]}T${good[2]}`).toISOString();
+        return iso;
+      }
+      // Bad format: 2025 06 23   09 17 03 06 (year month day hour min sec ms)
+      const bad = str.match(/(\d{4})[ .-]?(\d{2})[ .-]?(\d{2})\s+(\d{2})[ .-]?(\d{2})[ .-]?(\d{2})(?:[ .-]?(\d{2,3}))?/);
+      if (bad) {
+        // Pad ms if present
+        const ms = bad[7] ? bad[7].padEnd(3, '0') : '000';
+        // Compose ISO string
+        const iso = `${bad[1]}-${bad[2]}-${bad[3]}T${bad[4]}:${bad[5]}:${bad[6]}.${ms}Z`;
+        // Validate date
+        if (!isNaN(Date.parse(iso))) return iso;
+      }
+      return undefined;
+    }
+    // Try title
+    if (video.snippet?.title) {
+      const dt = parseDateTime(video.snippet.title);
+      if (dt) return dt;
+    }
+    // Try description
+    if (video.snippet?.description) {
+      // Look for lines with date/time
+      const lines = video.snippet.description.split(/\n|\r/);
+      for (const line of lines) {
+        const dt = parseDateTime(line);
+        if (dt) return dt;
+      }
+    }
+    return undefined;
+  }
+
+  /**
    * Convert YouTube video to local video format
    */
   private convertToLocalVideo(video: YouTubeVideo): LocalVideo {
@@ -220,6 +262,7 @@ class VideoDatabaseBuilder {
       description: video.snippet?.description || '',
       publishedAt: video.snippet?.publishedAt || '',
       datetime: this.extractDatetime(video),
+      originalFileDate: this.extractOriginalFileDate(video),
       tags: video.snippet?.tags || [],
       categoryId: video.snippet?.categoryId || '20',
       privacyStatus: video.status?.privacyStatus || 'private',

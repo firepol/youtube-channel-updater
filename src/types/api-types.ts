@@ -214,6 +214,7 @@ export interface LocalVideo {
   madeForKids: boolean;
   license: string;
   recordingDate?: string | undefined;
+  originalFileDate?: string | undefined; // Parsed from title/description, includes time
   lastProcessed?: string | undefined;
   metadataVersion?: string | undefined;
   // Additional fields for filtering
