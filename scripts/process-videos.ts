@@ -179,18 +179,6 @@ class VideoProcessor {
   }
 
   /**
-   * Backup video data before processing
-   */
-  private async backupVideo(videoId: string, videoData: LocalVideo): Promise<void> {
-    const backupFile = path.join(this.backupDir, `${videoId}.json`);
-    await fs.writeJson(backupFile, {
-      ...videoData,
-      backupDate: new Date().toISOString()
-    }, { spaces: 2 });
-    logVerbose(`Backed up video ${videoId}`);
-  }
-
-  /**
    * Update change history
    */
   private async updateHistory(change: ChangeHistory): Promise<void> {
@@ -256,7 +244,7 @@ class VideoProcessor {
   /**
    * Transform video description using multi-step transforms from config
    */
-  private transformDescription(originalDesc: string, originalTitle: string, recordingDate?: string): string {
+  private transformDescription(originalDesc: string, originalTitle: string): string {
     const transforms: { pattern: string; replacement: string }[] = Array.isArray(this.config.descriptionTransforms)
       ? this.config.descriptionTransforms
       : this.config.descriptionTransform ? [this.config.descriptionTransform] : [];
@@ -570,7 +558,7 @@ class VideoProcessor {
         recordingDate = extractedRecordingDate;
       }
       const newTitle = this.transformTitle(video.title, recordingDate);
-      const newDescription = this.transformDescription(video.description, video.title, recordingDate);
+      const newDescription = this.transformDescription(video.description, video.title);
       const newTags = this.generateTags(video.title);
       const processingId = this.generateProcessingId();
       const newMetadataVersion = `[metadata ${this.config.metadataVersion}: ${processingId}]`;
@@ -801,7 +789,7 @@ class VideoProcessor {
       let updateMetadata = false;
       if (!isPublish || (isPublish && (options.force || this.needsProcessing(video))) || needsPrivacyChange) {
         newTitle = this.transformTitle(video.title, recordingDate);
-        newDescription = this.transformDescription(video.description, video.title, recordingDate);
+        newDescription = this.transformDescription(video.description, video.title);
         newTags = this.generateTags(video.title);
         updateMetadata = (newTitle !== video.title) || (newDescription !== video.description) || (JSON.stringify(newTags) !== JSON.stringify(video.tags || []));
       }
@@ -868,9 +856,8 @@ class VideoProcessor {
       }
 
       // Update video via YouTube API
-      let updatedVideo;
       try {
-        updatedVideo = await this.youtubeClient.updateVideo(
+        await this.youtubeClient.updateVideo(
           video.id,
           videoSettings,
           shouldPublish // postUpdateCheck only when publishing
@@ -1033,7 +1020,7 @@ class VideoProcessor {
         let newTags = video.tags || [];
         if (!isPublish || (isPublish && (options.force || this.needsProcessing(video)))) {
           newTitle = this.transformTitle(video.title, recordingDate);
-          newDescription = this.transformDescription(video.description, video.title, recordingDate);
+          newDescription = this.transformDescription(video.description, video.title);
           newTags = this.generateTags(video.title);
         }
         const validationErrors = this.validateVideoMetadata(newTitle, newDescription, newTags);
@@ -1288,7 +1275,6 @@ async function main(): Promise<void> {
       if (options.csv) {
         // Collect all processed videos (successes only)
         const processed: any[] = (await fs.readJson('data/videos.json'));
-        const processedMap = new Map(processed.map((v: any) => [v.id, v]));
         const updatedVideos = result.errors.length === 0 ? processed : processed.filter((v: any) => result.errors.every((e: any) => e.videoId !== v.id));
         const csvRows = [CSV_HEADER, ...updatedVideos.map((v: any) => toCsvRow(v))];
         fs.writeFileSync(options.csv, csvRows.join('\n'));

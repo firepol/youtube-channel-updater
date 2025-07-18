@@ -9,7 +9,6 @@ import { LocalVideo, LocalPlaylist, LocalPlaylistItem, YouTubePlaylistItem } fro
 
 class PlaylistContentBuilder {
   private youtubeClient!: YouTubeClient;
-  private config: any;
   private logger: any;
   private playlistsDir: string;
   private videosDbPath: string;

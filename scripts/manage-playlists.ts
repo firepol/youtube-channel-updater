@@ -355,7 +355,7 @@ class PlaylistManager {
   /**
    * Save playlist cache to local file
    */
-  private async savePlaylistCache(playlistId: string, playlist: LocalPlaylist, dryRun = false): Promise<void> {
+  private async savePlaylistCache(_unused: string, playlist: LocalPlaylist, dryRun = false): Promise<void> {
     if (dryRun) return;
     await fs.ensureDir(this.playlistsDir);
     const cacheFile = path.join(this.playlistsDir, `${sanitizePlaylistName(playlist.title)}.json`);

@@ -287,13 +287,6 @@ class VideoDatabaseBuilder {
   }
 
   /**
-   * Check if video already exists in database
-   */
-  private isVideoDuplicate(videoId: string, existingVideos: LocalVideo[]): boolean {
-    return existingVideos.some(v => v.id === videoId);
-  }
-
-  /**
    * Check if an existing video has changes compared to YouTube data
    */
   private hasVideoChanges(existingVideo: LocalVideo, youtubeVideo: YouTubeVideo): boolean {
@@ -457,8 +450,6 @@ class VideoDatabaseBuilder {
           // Process videos from this page
           let newVideosCount = 0;
           let updatedVideosCount = 0;
-          let foundDuplicate = false;
-          let hasChanges = false;
           let oldestVideoChanged = false;
           
           for (const video of response.items) {
@@ -472,7 +463,6 @@ class VideoDatabaseBuilder {
                 currentVideos[existingVideoIndex] = this.updateExistingVideo(existingVideo, video);
                 updatedVideosCount++;
                 totalUpdatedVideos++;
-                hasChanges = true;
                 this.logger.info(`Updated video ${video.id} (${video.snippet?.title})`);
                 
                 // Check if this is the oldest video on this page (last in the array)
@@ -481,7 +471,6 @@ class VideoDatabaseBuilder {
                   this.logger.info(`Oldest video on page ${pageCount} has changes, will check next page`);
                 }
               }
-              foundDuplicate = true;
             } else {
               // New video
               const localVideo = this.convertToLocalVideo(video);

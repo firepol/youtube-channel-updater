@@ -64,7 +64,7 @@ class OAuthSetup {
   async exchangeCodeForTokens(code: string): Promise<any> {
     try {
       const tokens = await this.youtubeClient.getTokensFromCode(code);
-      await this.youtubeClient.saveTokens(tokens);
+      await this.youtubeClient.saveTokens(tokens, 'token.json');
       return tokens;
     } catch (error) {
       this.logger.error('Failed to exchange code for tokens', error as Error);
@@ -120,7 +120,7 @@ class OAuthSetup {
 
       // Exchange code for tokens
       this.logger.info('Exchanging authorization code for tokens...');
-      const tokens = await this.exchangeCodeForTokens(code);
+      await this.exchangeCodeForTokens(code);
 
       this.logger.success('OAuth authentication completed successfully!');
       this.logger.info('Tokens have been saved to token.json');

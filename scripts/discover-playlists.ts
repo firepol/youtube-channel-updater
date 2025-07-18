@@ -11,7 +11,6 @@ import { Command } from 'commander';
 
 class PlaylistDiscoverer {
   private youtubeClient!: YouTubeClient;
-  private config: any;
   private logger: any;
   private playlistsDir: string;
   private configDir: string;
@@ -84,30 +83,6 @@ class PlaylistDiscoverer {
     // Most playlists are likely public unless explicitly marked otherwise
     // You can customize this logic based on your channel's patterns
     return 'public';
-  }
-
-  /**
-   * Create empty JSON file for playlist
-   */
-  private async createPlaylistFile(playlist: YouTubePlaylist): Promise<void> {
-    const sanitizedName = sanitizePlaylistName(playlist.title);
-    const filePath = path.join(this.playlistsDir, `${sanitizedName}.json`);
-    
-    const playlistData = {
-      id: playlist.id,
-      title: playlist.title || 'Untitled Playlist',
-      description: playlist.description || '',
-      privacyStatus: this.correctPrivacyStatus(playlist),
-      itemCount: playlist.itemCount || 0,
-      items: []
-    };
-
-    try {
-      await fs.writeJson(filePath, playlistData, { spaces: 2 });
-      this.logger.verbose(`Created playlist file: ${filePath}`);
-    } catch (error) {
-      this.logger.error(`Failed to create playlist file for ${playlist.title || 'untitled'}`, error as Error);
-    }
   }
 
   /**

@@ -25,7 +25,6 @@
  */
 
 import fs from 'fs-extra';
-import path from 'path';
 import { Command } from 'commander';
 import { YouTubeClient } from '../src/api/youtube-client';
 import { ConfigLoader } from '../src/config/config-loader';
