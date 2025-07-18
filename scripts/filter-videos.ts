@@ -32,7 +32,7 @@ export interface FilterResult {
 }
 
 // Filter configuration interface
-interface FilterConfig {
+export interface FilterConfig {
   enabled: boolean;
   filters: FilterRule[];
 }

@@ -12,6 +12,7 @@ import { YouTubeClient } from '../src/api/youtube-client';
 import { loadConfig } from '../src/config/config-loader';
 import { getLogger, logVerbose, initializeLogger } from '../src/utils/logger';
 import { VideoFilter, FilterRule } from './filter-videos';
+import type { FilterConfig } from './filter-videos';
 
 interface ProcessingResult {
   processedVideos: number;
@@ -1180,7 +1181,7 @@ async function main(): Promise<void> {
     const processor = new VideoProcessor(youtubeClient, config.videoProcessing);
     
     let videos: LocalVideo[] = [];
-    
+    let combinedFilters: FilterRule[] = [];
     // Load videos to process
     if (options.videoId) {
       // Process specific video
@@ -1198,55 +1199,55 @@ async function main(): Promise<void> {
         process.exit(1);
       }
       videos = await fs.readJson(options.input) as LocalVideo[];
-    } else if (options.filterConfig || options.privacyStatus || options.publishedAfter || 
-               options.publishedBefore || options.titleContains || options.titleNotContains || 
-               options.descriptionContains || options.descriptionNotContains || 
-               options.minViews !== undefined || options.maxViews !== undefined) {
-      // Filter videos directly from channel database
+    } else if (
+      options.filterConfig || options.privacyStatus || options.publishedAfter || 
+      options.publishedBefore || options.titleContains || options.titleNotContains || 
+      options.descriptionContains || options.descriptionNotContains || 
+      options.minViews !== undefined || options.maxViews !== undefined
+    ) {
+      // Filtering videos directly from channel database
       getLogger().info('Filtering videos directly from channel database...');
-      
       const videoFilter = new VideoFilter();
-      
+      // 1. Load filters from config if specified
       if (options.filterConfig) {
-        // Use filter configuration file
         if (!await fs.pathExists(options.filterConfig)) {
           getLogger().error(`Filter configuration file ${options.filterConfig} not found`);
           process.exit(1);
         }
-        videos = await videoFilter.getFilteredVideosFromConfig(options.filterConfig);
-      } else {
-        // Build filters from command line options
-        const filters: FilterRule[] = [];
-        
-        const addFilter = (type: string, value: any) => {
-          if (value !== undefined) {
-            // Convert string numbers to actual numbers
-            if (typeof value === 'string' && !isNaN(Number(value)) && 
-                (type.includes('views'))) {
-              value = Number(value);
-            }
-            filters.push({ type, value });
+        const config = await fs.readJson(options.filterConfig);
+        // Find the first enabled filter config
+        for (const [name, filterConfigRaw] of Object.entries(config)) {
+          const filterConfig = filterConfigRaw as FilterConfig;
+          if (filterConfig.enabled && Array.isArray(filterConfig.filters) && filterConfig.filters.length > 0) {
+            getLogger().info(`Applying filter configuration: ${name}`);
+            combinedFilters = [...filterConfig.filters];
+            break;
           }
-        };
-        
-        addFilter('privacy_status', options.privacyStatus);
-        addFilter('published_after', options.publishedAfter);
-        addFilter('published_before', options.publishedBefore);
-        addFilter('title_contains', options.titleContains);
-        addFilter('title_not_contains', options.titleNotContains);
-        addFilter('description_contains', options.descriptionContains);
-        addFilter('description_not_contains', options.descriptionNotContains);
-        addFilter('min_views', options.minViews);
-        addFilter('max_views', options.maxViews);
-        
-        if (filters.length === 0) {
-          getLogger().error('No valid filters specified');
-          process.exit(1);
         }
-        
-        videos = await videoFilter.getFilteredVideos(filters);
       }
-      
+      // 2. Add CLI filters
+      const addFilter = (type: string, value: any) => {
+        if (value !== undefined) {
+          if (typeof value === 'string' && !isNaN(Number(value)) && (type.includes('views'))) {
+            value = Number(value);
+          }
+          combinedFilters.push({ type, value });
+        }
+      };
+      addFilter('privacy_status', options.privacyStatus);
+      addFilter('published_after', options.publishedAfter);
+      addFilter('published_before', options.publishedBefore);
+      addFilter('title_contains', options.titleContains);
+      addFilter('title_not_contains', options.titleNotContains);
+      addFilter('description_contains', options.descriptionContains);
+      addFilter('description_not_contains', options.descriptionNotContains);
+      addFilter('min_views', options.minViews);
+      addFilter('max_views', options.maxViews);
+      if (combinedFilters.length === 0) {
+        getLogger().error('No valid filters specified');
+        process.exit(1);
+      }
+      videos = await videoFilter.getFilteredVideos(combinedFilters);
       getLogger().info(`Found ${videos.length} videos matching filter criteria`);
     } else {
       getLogger().error('Either --input, --video-id, --filter-config, or direct filter options must be specified');
