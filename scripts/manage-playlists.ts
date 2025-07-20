@@ -1349,8 +1349,52 @@ async function main(): Promise<void> {
         getLogger().info(`[DRY RUN] Total items: ${localItems.length}`);
         return;
       }
-      // (Live mode) Compute and apply minimal set of moves using YouTube API if needed (not shown here)
-      // ...
+      // (Live mode) Compute and apply minimal set of moves using YouTube API
+      // Map videoId to playlistItemId from cache
+      const idMap: Record<string, string> = {};
+      for (const item of localItems) {
+        if ((item as any).playlistItemId) {
+          idMap[item.videoId] = (item as any).playlistItemId;
+        }
+      }
+      // For each position, if the item is not in the correct place, move it
+      let currentOrder = [...localItems];
+      for (let i = 0; i < sortedItems.length; i++) {
+        const desired = sortedItems[i];
+        const current = currentOrder[i];
+        if (current.videoId === desired.videoId) continue;
+        // Find the index of the desired item in the current order
+        const fromIdx = currentOrder.findIndex(x => x.videoId === desired.videoId);
+        if (fromIdx === -1) {
+          getLogger().error(`Could not find videoId=${desired.videoId} in current order. Skipping.`);
+          continue;
+        }
+        const playlistItemId = idMap[desired.videoId];
+        if (!playlistItemId) {
+          getLogger().error(`No playlistItemId in cache for videoId=${desired.videoId}. Skipping move.`);
+          continue;
+        }
+        try {
+          await youtubeClient.updatePlaylistItemPosition(playlistItemId, i);
+          getLogger().info(`Moved videoId=${desired.videoId} (playlistItemId=${playlistItemId}) to position ${i}`);
+          // Update local cache: move the item in currentOrder
+          const [moved] = currentOrder.splice(fromIdx, 1);
+          currentOrder.splice(i, 0, moved);
+          // Update positions in local cache
+          currentOrder.forEach((item, idx) => (item.position = idx));
+          playlistCache.items = [...currentOrder];
+          await playlistManager["savePlaylistCache"](targetPlaylist.id, playlistCache);
+        } catch (err: any) {
+          const errMsg = err && err.message ? err.message : String(err);
+          if (errMsg.includes('quota') || errMsg.includes('Rate limit')) {
+            getLogger().error(`Rate limit error detected, stopping further moves: ${errMsg}`);
+            process.exit(1);
+          } else {
+            getLogger().error(`Failed to move playlistItemId=${playlistItemId} for videoId=${desired.videoId}:`, err as Error);
+          }
+        }
+      }
+      getLogger().info(`Finished sorting playlist '${targetPlaylist.title}'.`);
       return;
     }
     // === END SORT LOGIC ===
