@@ -45,12 +45,13 @@ async function exportPlaylistItemsToCsv(
       videoId: item.videoId,
       title: item.title,
       privacyStatus: v.privacyStatus || '',
+      originalFileDate: v.originalFileDate || '',
       recordingDate: v.recordingDate || '',
       publishedAt: v.publishedAt || item.publishedAt,
       lastUpdated: v.lastUpdated || ''
     };
   });
-  const csv = json2csv(rows, { fields: ['position', 'videoId', 'title', 'privacyStatus', 'recordingDate', 'publishedAt', 'lastUpdated'] });
+  const csv = json2csv(rows, { fields: ['position', 'videoId', 'title', 'privacyStatus', 'originalFileDate', 'recordingDate', 'publishedAt', 'lastUpdated'] });
   await require('fs-extra').writeFile(outputFile, csv, 'utf8');
 }
 
@@ -1318,11 +1319,11 @@ async function main(): Promise<void> {
         getLogger().info(`CSV output written: ${before}`);
       }
       // Build desired order (sorted)
-      let videoDb: Record<string, { recordingDate?: string; publishedAt: string }> = {};
+      let videoDb: Record<string, { originalFileDate?: string; recordingDate?: string; publishedAt: string }> = {};
       try {
         const db = await fs.readJson('data/videos.json');
         for (const v of db) {
-          videoDb[v.id] = { recordingDate: v.recordingDate, publishedAt: v.publishedAt };
+          videoDb[v.id] = { originalFileDate: v.originalFileDate, recordingDate: v.recordingDate, publishedAt: v.publishedAt };
         }
       } catch (e) {
         videoDb = {};
@@ -1332,8 +1333,8 @@ async function main(): Promise<void> {
         sortedItems = [...localItems].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
       } else {
         sortedItems = [...localItems].sort((a, b) => {
-          const aDate = videoDb[a.videoId]?.recordingDate || videoDb[a.videoId]?.publishedAt || a.publishedAt;
-          const bDate = videoDb[b.videoId]?.recordingDate || videoDb[b.videoId]?.publishedAt || b.publishedAt;
+          const aDate = videoDb[a.videoId]?.originalFileDate || videoDb[a.videoId]?.recordingDate || videoDb[a.videoId]?.publishedAt || a.publishedAt;
+          const bDate = videoDb[b.videoId]?.originalFileDate || videoDb[b.videoId]?.recordingDate || videoDb[b.videoId]?.publishedAt || b.publishedAt;
           return new Date(aDate).getTime() - new Date(bDate).getTime();
         });
       }
