@@ -71,6 +71,8 @@ class Logger {
   }
 
   private shouldLog(level: LogLevel): boolean {
+    // If verbose is true, always log verbose messages
+    if (level === LogLevel.VERBOSE && this.config.verbose) return true;
     const levels = [LogLevel.ERROR, LogLevel.INFO, LogLevel.VERBOSE];
     const configLevelIndex = levels.indexOf(this.config.logLevel);
     const messageLevelIndex = levels.indexOf(level);

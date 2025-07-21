@@ -10,9 +10,16 @@ import {
 } from '../src/types/api-types';
 import { YouTubeClient } from '../src/api/youtube-client';
 import { loadConfig } from '../src/config/config-loader';
-import { getLogger, logVerbose, initializeLogger } from '../src/utils/logger';
+import { getLogger, logVerbose, initializeLogger, LogLevel } from '../src/utils/logger';
 import { VideoFilter, FilterRule } from './filter-videos';
 import type { FilterConfig } from './filter-videos';
+
+// EARLY LOGGER INITIALIZATION: Ensures logVerbose works before config is loaded
+initializeLogger({
+  verbose: process.env.VERBOSE === 'true',
+  logLevel: LogLevel.VERBOSE,
+  logsDir: 'logs'
+});
 
 interface ProcessingResult {
   processedVideos: number;
@@ -256,7 +263,9 @@ class VideoProcessor {
       result += metadataTag;
     }
     if (result !== source) {
-      getLogger().info(`Description transformed: "${source}" → "${result}"`);
+      getLogger().info(
+        `Description transformed: "${source.replace(/\n\n/g, '\\n\\n').replace(/\n/g, '\\n')}" → "${result.replace(/\n\n/g, '\\n\\n').replace(/\n/g, '\\n')}"`
+      );
     }
     return result;
   }
@@ -333,10 +342,14 @@ class VideoProcessor {
         logVerbose(`Video ${video.id} needs processing: license or category needs updating`);
         return true;
       }
+
+      logVerbose(`Video ${video.id} doesn't need processing`)
       
       return false;
     }
     
+    logVerbose(`Video ${video.id} needs processing`)
+
     return true;
   }
 
@@ -753,6 +766,17 @@ class VideoProcessor {
   }
 
   /**
+   * Check if the title or description (ignoring only the metadata tag in the description) has changed
+   */
+  private hasTitleOrDescriptionChanged(video: LocalVideo, newTitle: string, newDescription: string): boolean {
+    // Compare title
+    if (video.title !== newTitle) return true;
+    // Compare description, ignoring only the metadata tag
+    const stripMetadata = (desc: string) => desc.replace(/\n?\[metadata v[\d.]+: [^\]]+\]$/, '').trim();
+    return stripMetadata(video.description || '') !== stripMetadata(newDescription || '');
+  }
+
+  /**
    * Process a single video
    */
   private async processVideo(video: LocalVideo, options: ProcessingOptions & { publish?: boolean }): Promise<boolean> {
@@ -764,14 +788,7 @@ class VideoProcessor {
       const needsPrivacyChange = currentPrivacy !== desiredPrivacy;
       // --- End privacy logic ---
 
-      // Check if video needs processing or publishing
-      const shouldPublish = isPublish && desiredPrivacy === 'public' && currentPrivacy !== 'public';
-      const needsTransform = !isPublish && (!options.force && !this.needsProcessing(video)) === false;
-      if (!shouldPublish && !needsTransform && !needsPrivacyChange) {
-        logVerbose(`Skipping video ${video.id} - already processed and privacy up to date`);
-        return true;
-      }
-
+      // Transform video metadata if not just publishing
       let recordingDate = video.recordingDate;
       if (!recordingDate) {
         recordingDate = this.extractRecordingDateFromTitle(video.title);
@@ -781,8 +798,6 @@ class VideoProcessor {
           logVerbose(`No recording date found in title: "${video.title}"`);
         }
       }
-
-      // Transform video metadata if not just publishing
       let newTitle = video.title;
       let newDescription = video.description;
       let newTags = video.tags || [];
@@ -792,6 +807,16 @@ class VideoProcessor {
         newDescription = this.transformDescription(video.description, video.title);
         newTags = this.generateTags(video.title);
         updateMetadata = (newTitle !== video.title) || (newDescription !== video.description) || (JSON.stringify(newTags) !== JSON.stringify(video.tags || []));
+      }
+
+      // Check if video needs processing or publishing
+      const shouldPublish = isPublish && desiredPrivacy === 'public' && currentPrivacy !== 'public';
+      // Use the new helper for needsTransform
+      const needsTransform = !isPublish && this.hasTitleOrDescriptionChanged(video, newTitle, newDescription);
+      if (!shouldPublish && !needsTransform && !needsPrivacyChange) {
+        logVerbose(`shouldPublish: ${shouldPublish}, needsTransform: ${needsTransform}, needsPrivacyChange: ${needsPrivacyChange}`)
+        logVerbose(`Skipping video ${video.id} - already processed and privacy up to date`);
+        return true;
       }
 
       // === VALIDATION BEFORE API CALL ===
@@ -1018,10 +1043,20 @@ class VideoProcessor {
         let newTitle = video.title;
         let newDescription = video.description;
         let newTags = video.tags || [];
-        if (!isPublish || (isPublish && (options.force || this.needsProcessing(video)))) {
+        let needsPrivacyChange = false;
+        if (!isPublish || (isPublish && (options.force || this.needsProcessing(video))) || needsPrivacyChange) {
           newTitle = this.transformTitle(video.title, recordingDate);
           newDescription = this.transformDescription(video.description, video.title);
           newTags = this.generateTags(video.title);
+        }
+        // Set needsPrivacyChange after newTitle/newDescription are available
+        needsPrivacyChange = video.privacyStatus !== this.determinePrivacy(video, isPublish);
+        const shouldPublish = isPublish && this.determinePrivacy(video, isPublish) === 'public' && video.privacyStatus !== 'public';
+        const needsTransform = !isPublish && this.hasTitleOrDescriptionChanged(video, newTitle, newDescription);
+        if (!shouldPublish && !needsTransform && !needsPrivacyChange) {
+          logVerbose(`shouldPublish: ${shouldPublish}, needsTransform: ${needsTransform}, needsPrivacyChange: ${needsPrivacyChange}`)
+          logVerbose(`Skipping video ${video.id} - already processed and privacy up to date`);
+          continue;
         }
         const validationErrors = this.validateVideoMetadata(newTitle, newDescription, newTags);
         if (validationErrors.length > 0) {

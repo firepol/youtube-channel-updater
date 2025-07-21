@@ -12,7 +12,7 @@ import {
 } from '../src/types/api-types';
 import { YouTubeClient } from '../src/api/youtube-client';
 import { loadConfig } from '../src/config/config-loader';
-import { getLogger, logVerbose, initializeLogger } from '../src/utils/logger';
+import { getLogger, logVerbose, initializeLogger, LogLevel } from '../src/utils/logger';
 import { VideoFilter, FilterRule } from './filter-videos';
 import { sanitizePlaylistName } from '../src/utils/playlist';
 
@@ -1041,6 +1041,13 @@ async function main(): Promise<void> {
   if (options.verbose) {
     process.env.VERBOSE = 'true';
   }
+
+  // EARLY LOGGER INITIALIZATION: Ensures logVerbose works before config is loaded
+  initializeLogger({
+    verbose: process.env.VERBOSE === 'true',
+    logLevel: LogLevel.VERBOSE,
+    logsDir: 'logs'
+  });
 
   try {
     // Load configuration
