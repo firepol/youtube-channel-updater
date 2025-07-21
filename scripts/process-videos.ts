@@ -766,7 +766,10 @@ class VideoProcessor {
   }
 
   /**
-   * Check if the title or description (ignoring only the metadata tag in the description) has changed
+   * Determines if a video needs processing.
+   * Only processes if the title or the meaningful part of the description (ignoring just the metadata tag) changes,
+   * regardless of the metadata version. The metadata version is not a direct discriminator for processing.
+   * This means even if the metadata version is outdated, the video is only processed if the replacements actually change the content.
    */
   private hasTitleOrDescriptionChanged(video: LocalVideo, newTitle: string, newDescription: string): boolean {
     // Compare title
@@ -802,7 +805,7 @@ class VideoProcessor {
       let newDescription = video.description;
       let newTags = video.tags || [];
       let updateMetadata = false;
-      if (!isPublish || (isPublish && (options.force || this.needsProcessing(video))) || needsPrivacyChange) {
+      if (!isPublish || (isPublish && (options.force || needsPrivacyChange))) {
         newTitle = this.transformTitle(video.title, recordingDate);
         newDescription = this.transformDescription(video.description, video.title);
         newTags = this.generateTags(video.title);

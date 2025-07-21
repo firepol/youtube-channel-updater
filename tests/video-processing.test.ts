@@ -497,3 +497,87 @@ describe('Playlist Privacy Enforcement', () => {
     expect(manager['canAddVideoToPlaylist']('private', 'private')).toBe(true);
   });
 }); 
+
+describe('Regression: Video should not be skipped if only metadata version differs', () => {
+  let processor: VideoProcessor;
+  let mockClient: any;
+  const config = {
+    titleTransform: {
+      pattern: "Tom Clancy's The Division 2 (\\d{4}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (.+)",
+      replacement: "DZ $8 / The Division 2 / $1-$2-$3"
+    },
+    descriptionTransform: {
+      pattern: "Tom Clancy's The Division 2 (\\d{4}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2}) (\\d{2})",
+      replacement: "Tom Clancy's The Division 2 / $1-$2-$3 $4:$5"
+    },
+    baseTags: ["The Division 2", "Gaming", "Gameplay", "Tom Clancy"],
+    maxDynamicTags: 2,
+    metadataVersion: "v1.1",
+    videoSettings: {
+      madeForKids: false,
+      license: "creativeCommon",
+      categoryId: "20",
+      allowRemixing: true
+    },
+    privacyRules: {
+      videoTitleKeywords: {
+        unlisted: ["unlisted", "microphone"],
+        private: ["private", "secret"]
+      },
+      defaultVideoPrivacy: {
+        publish: "public",
+        draft: "unlisted"
+      }
+    },
+    recordingDateExtractPattern: "(\\d{4})[ .-]?(\\d{2})[ .-]?(\\d{2})[ .-]+(\\d{2})[ .-]?(\\d{2})[ .-]?(\\d{2})[ .-]?(\\d{2})"
+  };
+
+  beforeEach(() => {
+    mockClient = {
+      updateVideo: vi.fn().mockResolvedValue({}),
+      getVideoStatus: vi.fn().mockResolvedValue({
+        madeForKids: false,
+        license: "creativeCommon",
+        categoryId: "20",
+        privacyStatus: "public"
+      })
+    };
+    processor = new VideoProcessor(mockClient, config);
+  });
+
+  it('should process video N2GGjy3aU1Q if metadata version is outdated', async () => {
+    const video: LocalVideo = {
+      id: 'N2GGjy3aU1Q',
+      title: "DZ West: Twin Courts Landmark (Invaded) / The Division 2 / 2025 05 08",
+      description: "Tom Clancy's The Division 2 2025 05 08   15 31 35 05\n\n[metadata v1.0: proc_20250706_153234]",
+      publishedAt: "2025-05-08T17:40:08Z",
+      datetime: "2025-05-08",
+      tags: ["4K", "Dark Zone", "Gameplay", "Gaming", "The Division 2"],
+      categoryId: "20",
+      privacyStatus: "public",
+      madeForKids: false,
+      license: "creativeCommon",
+      uploadStatus: "processed",
+      embeddable: false,
+      publicStatsViewable: false,
+      definition: "hd",
+      caption: "false",
+      defaultAudioLanguage: "en-US",
+      statistics: {
+        viewCount: "1",
+        likeCount: "0",
+        dislikeCount: "0",
+        favoriteCount: "0",
+        commentCount: "0"
+      },
+      recordingDate: "2025-05-08T00:00:00Z",
+      lastFetched: "2025-07-18T10:51:08.987Z",
+      lastUpdated: "2025-05-08T17:40:08Z",
+      originalFileDate: "2025-05-08T15:31:35.050Z"
+    };
+    // With new logic, only process if title or meaningful description changes, not just metadata version
+    const result = await processor['processVideo'](video, { dryRun: false, force: false, verbose: false });
+    expect(result).toBe(true); // Skipped, not failed
+    expect(mockClient.updateVideo).not.toHaveBeenCalled(); // Should not process if only metadata version changed
+  });
+}); 
