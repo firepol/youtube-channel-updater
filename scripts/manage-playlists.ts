@@ -275,6 +275,24 @@ class PositionCalculator {
 }
 
 class PlaylistManager {
+  /**
+   * Helper to get the best date for a videoId from the video database
+   * Priority: originalFileDate > recordingDate > publishedAt > fallback
+   */
+  private getBestVideoDate(
+    videoId: string,
+    videoDb: Record<string, { originalFileDate?: string; recordingDate?: string; publishedAt?: string }>,
+    fallback?: string
+  ): string {
+    const entry = videoDb[videoId];
+    return (
+      entry?.originalFileDate ||
+      entry?.recordingDate ||
+      entry?.publishedAt ||
+      fallback ||
+      ''
+    );
+  }
   private youtubeClient: YouTubeClient;
   private playlistConfig: PlaylistConfig;
   private matcher: PlaylistMatcher;
@@ -660,7 +678,7 @@ class PlaylistManager {
    * Process a single video for playlist assignment
    */
   private async processVideo(
-    video: LocalVideo, 
+    video: LocalVideo,
     options: ProcessingOptions
   ): Promise<PlaylistAssignment> {
     const assignment: PlaylistAssignment = {
@@ -671,7 +689,6 @@ class PlaylistManager {
 
     // Find matching playlists
     const matchingPlaylists = this.matcher.getMatchingPlaylists(video.title, this.playlistConfig.playlists);
-    
     if (matchingPlaylists.length === 0) {
       console.log(`No matching playlists found for video: ${video.title}`);
       return assignment;
@@ -679,16 +696,25 @@ class PlaylistManager {
 
     console.log(`Video "${video.title}" matches ${matchingPlaylists.length} playlists`);
 
+    // === Load video database for date resolution ===
+    let videoDb: Record<string, { originalFileDate?: string; recordingDate?: string; publishedAt?: string }> = {};
+    try {
+      const db = await require('fs-extra').readJson('data/videos.json');
+      for (const v of db) {
+        videoDb[v.id] = { originalFileDate: v.originalFileDate, recordingDate: v.recordingDate, publishedAt: v.publishedAt };
+      }
+    } catch (e) {
+      videoDb = {};
+    }
+
     // Process each matching playlist
     for (const playlist of matchingPlaylists) {
       try {
         // Load or refresh playlist cache
         let playlistCache = await this.loadPlaylistCache(playlist.id, playlist.title);
-        
         if (!playlistCache || options.refreshCache) {
           playlistCache = await this.refreshPlaylistCache(playlist.id, options.dryRun);
         }
-
         if (!playlistCache) {
           assignment.assignedPlaylists.push({
             playlistId: playlist.id,
@@ -730,15 +756,31 @@ class PlaylistManager {
         }
         // === End duplicate check ===
 
-        // Calculate position
-        const position = this.calculator.calculatePosition(
-          video.recordingDate || video.publishedAt,
-          playlistCache.items
-        );
+        // === Calculate position using robust date logic ===
+        // For the new video:
+        const newVideoDate = this.getBestVideoDate(video.id, videoDb, video.publishedAt);
+        // For all playlist items:
+        const playlistItemsWithDates = playlistCache.items.map(item => ({
+          ...item,
+          _sortDate: this.getBestVideoDate(item.videoId, videoDb, item.publishedAt)
+        }));
+        // Sort playlist items chronologically (oldest first)
+        const sortedItems = playlistItemsWithDates.sort((a, b) => {
+          return new Date(a._sortDate).getTime() - new Date(b._sortDate).getTime();
+        });
+        // Find the correct position for the new video
+        let position = sortedItems.length;
+        const newVideoTime = new Date(newVideoDate).getTime();
+        for (let i = 0; i < sortedItems.length; i++) {
+          const itemTime = new Date(sortedItems[i]._sortDate).getTime();
+          if (newVideoTime <= itemTime) {
+            position = i;
+            break;
+          }
+        }
 
         // Add to playlist
         const result = await this.addVideoToPlaylist(video.id, playlist.id, position, options);
-        
         // === Rate limit error handling ===
         if (result.error && typeof result.error === 'string' && (result.error.toLowerCase().includes('rate limit') || result.error.toLowerCase().includes('quota'))) {
           getLogger().error(`Rate limit or quota error detected: ${result.error}`);
@@ -902,20 +944,19 @@ class PlaylistManager {
     if (field === 'title') {
       sorted.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
     } else {
-      // Load video database to get recordingDate
-      let videoDb: Record<string, { recordingDate?: string; publishedAt: string }> = {};
+      // Load video database to get best date
+      let videoDb: Record<string, { originalFileDate?: string; recordingDate?: string; publishedAt?: string }> = {};
       try {
         const db = require('fs-extra').readJsonSync('data/videos.json');
         for (const v of db) {
-          videoDb[v.id] = { recordingDate: v.recordingDate, publishedAt: v.publishedAt };
+          videoDb[v.id] = { originalFileDate: v.originalFileDate, recordingDate: v.recordingDate, publishedAt: v.publishedAt };
         }
       } catch (e) {
-        // If not found, fallback to publishedAt only
         videoDb = {};
       }
       sorted.sort((a, b) => {
-        const aDate = videoDb[a.videoId]?.recordingDate || videoDb[a.videoId]?.publishedAt || a.publishedAt;
-        const bDate = videoDb[b.videoId]?.recordingDate || videoDb[b.videoId]?.publishedAt || b.publishedAt;
+        const aDate = this.getBestVideoDate(a.videoId, videoDb, a.publishedAt);
+        const bDate = this.getBestVideoDate(b.videoId, videoDb, b.publishedAt);
         return new Date(aDate).getTime() - new Date(bDate).getTime();
       });
     }
