@@ -1397,7 +1397,7 @@ async function main(): Promise<void> {
         getLogger().info(`[DRY RUN] Total items: ${localItems.length}`);
         return;
       }
-      // (Live mode) Compute and apply minimal set of moves using YouTube API
+      // (Live mode) Compute and apply minimal set of moves using LIS-based algorithm
       // Map videoId to playlistItemId from cache
       const idMap: Record<string, string> = {};
       for (const item of localItems) {
@@ -1405,44 +1405,81 @@ async function main(): Promise<void> {
           idMap[item.videoId] = (item as any).playlistItemId;
         }
       }
-      // For each position, if the item is not in the correct place, move it
+      // Build desired order videoId -> index
+      const desiredOrder = sortedItems.map(item => item.videoId);
+      const videoIdToDesiredIdx = new Map<string, number>();
+      desiredOrder.forEach((vid, idx) => videoIdToDesiredIdx.set(vid, idx));
+      // Build current order as array of desired indices
       let currentOrder = [...localItems];
-      for (let i = 0; i < sortedItems.length; i++) {
-        const desired = sortedItems[i];
-        const current = currentOrder[i];
-        if (current.videoId === desired.videoId) continue;
-        // Find the index of the desired item in the current order
-        const fromIdx = currentOrder.findIndex(x => x.videoId === desired.videoId);
-        if (fromIdx === -1) {
-          getLogger().error(`Could not find videoId=${desired.videoId} in current order. Skipping.`);
-          continue;
+      const seq = currentOrder.map(item => videoIdToDesiredIdx.get(item.videoId));
+      // Find LIS in seq (indices of currentOrder)
+      function longestIncreasingSubsequence(arr: (number|undefined)[]): number[] {
+        const n = arr.length;
+        const parent = new Array(n);
+        const pileTops: number[] = [];
+        const pileIdx: number[] = [];
+        for (let i = 0; i < n; i++) {
+          const x = arr[i];
+          if (x === undefined) continue;
+          let lo = 0, hi = pileTops.length;
+          while (lo < hi) {
+            const mid = (lo + hi) >> 1;
+            if ((arr[pileTops[mid]] as number) < x) lo = mid + 1;
+            else hi = mid;
+          }
+          if (lo === pileTops.length) pileTops.push(i);
+          else pileTops[lo] = i;
+          parent[i] = lo > 0 ? pileTops[lo - 1] : -1;
+          pileIdx[i] = lo;
         }
-        const playlistItemId = idMap[desired.videoId];
+        // Reconstruct LIS
+        let lis: number[] = [];
+        let k = pileTops.length > 0 ? pileTops[pileTops.length - 1] : -1;
+        for (let i = pileTops.length - 1; i >= 0; i--) {
+          lis[i] = k;
+          k = parent[k];
+        }
+        return lis;
+      }
+      const lisIndices = longestIncreasingSubsequence(seq);
+      // Mark items in LIS (these are already in correct relative order)
+      const inLIS = new Set(lisIndices);
+      // Now, for all items not in LIS, move them to their correct position in desired order
+      // We'll process from left to right in desired order
+      let moves = 0;
+      for (let desiredIdx = 0; desiredIdx < desiredOrder.length; desiredIdx++) {
+        const vid = desiredOrder[desiredIdx];
+        const curIdx = currentOrder.findIndex(x => x.videoId === vid);
+        if (curIdx === desiredIdx) continue; // already in place
+        // If this item is in LIS and at the right place, skip
+        if (inLIS.has(curIdx)) continue;
+        const playlistItemId = idMap[vid];
         if (!playlistItemId) {
-          getLogger().error(`No playlistItemId in cache for videoId=${desired.videoId}. Skipping move.`);
+          getLogger().error(`No playlistItemId in cache for videoId=${vid}. Skipping move.`);
           continue;
         }
         try {
-          await youtubeClient.updatePlaylistItemPosition(playlistItemId, i);
-          getLogger().info(`Moved videoId=${desired.videoId} (playlistItemId=${playlistItemId}) to position ${i}`);
+          await youtubeClient.updatePlaylistItemPosition(playlistItemId, desiredIdx);
+          getLogger().info(`Moved videoId=${vid} (playlistItemId=${playlistItemId}) to position ${desiredIdx}`);
           // Update local cache: move the item in currentOrder
-          const [moved] = currentOrder.splice(fromIdx, 1);
-          currentOrder.splice(i, 0, moved);
+          const [moved] = currentOrder.splice(curIdx, 1);
+          currentOrder.splice(desiredIdx, 0, moved);
           // Update positions in local cache
           currentOrder.forEach((item, idx) => (item.position = idx));
           playlistCache.items = [...currentOrder];
           await playlistManager["savePlaylistCache"](targetPlaylist.id, playlistCache);
+          moves++;
         } catch (err: any) {
           const errMsg = err && err.message ? err.message : String(err);
           if (errMsg.includes('quota') || errMsg.includes('Rate limit')) {
             getLogger().error(`Rate limit error detected, stopping further moves: ${errMsg}`);
             process.exit(1);
           } else {
-            getLogger().error(`Failed to move playlistItemId=${playlistItemId} for videoId=${desired.videoId}:`, err as Error);
+            getLogger().error(`Failed to move playlistItemId=${playlistItemId} for videoId=${vid}:`, err as Error);
           }
         }
       }
-      getLogger().info(`Finished sorting playlist '${targetPlaylist.title}'.`);
+      getLogger().info(`Finished LIS-based sorting of playlist '${targetPlaylist.title}'. Total moves: ${moves}`);
       return;
     }
     // === END SORT LOGIC ===
