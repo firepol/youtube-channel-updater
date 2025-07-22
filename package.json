@@ -42,11 +42,13 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@types/csv-parse": "^1.1.12",
     "@types/fs-extra": "^11.0.1",
     "@types/json2csv": "^5.0.7",
     "@types/node": "^20.8.0",
     "@typescript-eslint/eslint-plugin": "^6.8.0",
     "@typescript-eslint/parser": "^6.8.0",
+    "csv-parse": "^6.1.0",
     "eslint": "^8.51.0",
     "tsx": "^4.20.3",
     "typescript": "^5.2.2",

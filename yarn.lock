@@ -446,6 +446,13 @@
   resolved "https://registry.npmjs.org/@types/chai/-/chai-4.3.20.tgz"
   integrity sha512-/pC9HAB5I/xMlc5FP77qjCnI16ChlJfW0tGa0IUcFn38VJrTV6DeZ60NU5KZBtaOZqjdpwTWohz5HU1RrhiYxQ==
 
+"@types/csv-parse@^1.1.12":
+  version "1.1.12"
+  resolved "https://registry.npmjs.org/@types/csv-parse/-/csv-parse-1.1.12.tgz"
+  integrity sha512-p6uZznjJOcFaymduLYf45ik28IYzChnkt+ofJOWa16bb2JRCHdxs/ai03q6raizCc5JuunVsbgtlDxfu9y2Nag==
+  dependencies:
+    "@types/node" "*"
+
 "@types/estree@1.0.8":
   version "1.0.8"
   resolved "https://registry.npmjs.org/@types/estree/-/estree-1.0.8.tgz"
@@ -829,6 +836,11 @@ cross-spawn@^7.0.2:
     path-key "^3.1.0"
     shebang-command "^2.0.0"
     which "^2.0.1"
+
+csv-parse@^6.1.0:
+  version "6.1.0"
+  resolved "https://registry.npmjs.org/csv-parse/-/csv-parse-6.1.0.tgz"
+  integrity sha512-CEE+jwpgLn+MmtCpVcPtiCZpVtB6Z2OKPTr34pycYYoL7sxdOkXDdQ4lRiw6ioC0q6BLqhc6cKweCVvral8yhw==
 
 debug@^4.3.1, debug@^4.3.2, debug@^4.3.4, debug@4:
   version "4.4.1"
