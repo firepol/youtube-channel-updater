@@ -1395,6 +1395,63 @@ async function main(): Promise<void> {
       if (options.dryRun) {
         getLogger().info(`[DRY RUN] Would sort playlist '${targetPlaylist.title}' by ${sortField}.`);
         getLogger().info(`[DRY RUN] Total items: ${localItems.length}`);
+
+        // Compute predicted moves (LIS-based)
+        // Map videoId to desired index
+        const desiredOrder = sortedItems.map(item => item.videoId);
+        const videoIdToDesiredIdx = new Map<string, number>();
+        desiredOrder.forEach((vid, idx) => videoIdToDesiredIdx.set(vid, idx));
+        // Build current order as array of desired indices
+        const seq = localItems.map(item => videoIdToDesiredIdx.get(item.videoId));
+        // Find LIS in seq (indices of localItems)
+        function longestIncreasingSubsequence(arr: (number|undefined)[]): number[] {
+          const n = arr.length;
+          const parent = new Array(n);
+          const pileTops: number[] = [];
+          const pileIdx: number[] = [];
+          for (let i = 0; i < n; i++) {
+            const x = arr[i];
+            if (x === undefined) continue;
+            let lo = 0, hi = pileTops.length;
+            while (lo < hi) {
+              const mid = (lo + hi) >> 1;
+              if ((arr[pileTops[mid]] as number) < x) lo = mid + 1;
+              else hi = mid;
+            }
+            if (lo === pileTops.length) pileTops.push(i);
+            else pileTops[lo] = i;
+            parent[i] = lo > 0 ? pileTops[lo - 1] : -1;
+            pileIdx[i] = lo;
+          }
+          // Reconstruct LIS
+          let lis: number[] = [];
+          let k = pileTops.length > 0 ? pileTops[pileTops.length - 1] : -1;
+          for (let i = pileTops.length - 1; i >= 0; i--) {
+            lis[i] = k;
+            k = parent[k];
+          }
+          return lis;
+        }
+        const lisIndices = longestIncreasingSubsequence(seq);
+        const inLIS = new Set(lisIndices);
+        // List moves
+        const moves = localItems
+          .map((item, idx) => ({
+            videoId: item.videoId,
+            from: idx,
+            to: videoIdToDesiredIdx.get(item.videoId),
+            inLIS: inLIS.has(idx)
+          }))
+          .filter(m => !m.inLIS && m.from !== m.to);
+        getLogger().info(`[DRY RUN] Predicted moves to sort:`);
+        if (moves.length === 0) {
+          getLogger().info('  No moves needed.');
+        } else {
+          for (const move of moves) {
+            getLogger().info(`  videoId=${move.videoId} from position ${move.from} -> ${move.to}`);
+          }
+          getLogger().info(`Total moves: ${moves.length}`);
+        }
         return;
       }
       // (Live mode) Compute and apply minimal set of moves using LIS-based algorithm
