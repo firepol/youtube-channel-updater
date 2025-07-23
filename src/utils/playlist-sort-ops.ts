@@ -25,24 +25,68 @@ export interface MoveOperation {
 }
 
 /**
- * Returns a minimal list of move operations to transform currentOrder into desiredOrder.
- * Each move is applied in memory, so subsequent moves use the updated order.
+ * Returns a block-aware minimal list of move operations to transform currentOrder into desiredOrder.
+ * Preserves maximal runs (blocks) already in correct order, reducing unnecessary moves.
  * @param currentOrder Array of videoIds (current playlist order)
  * @param desiredOrder Array of videoIds (desired playlist order)
  */
 export function getMinimalMoveOperations(currentOrder: string[], desiredOrder: string[]): MoveOperation[] {
-  const moves: MoveOperation[] = [];
+  // Map currentOrder to indices in desiredOrder
+  const posInDesired: number[] = currentOrder.map(id => desiredOrder.indexOf(id));
+
+  // Find LIS in posInDesired
+  // Patience sorting O(n log n) LIS implementation
+  const n = posInDesired.length;
+  const piles: number[] = [];
+  const predecessors: number[] = Array(n).fill(-1);
+  const pileTops: number[] = [];
+
+  for (let i = 0; i < n; i++) {
+    const x = posInDesired[i];
+    if (x === -1) continue; // skip items not in desiredOrder
+    let left = 0, right = piles.length;
+    while (left < right) {
+      const mid = (left + right) >> 1;
+      if (posInDesired[piles[mid]] < x) left = mid + 1;
+      else right = mid;
+    }
+    if (left > 0) predecessors[i] = piles[left - 1];
+    if (left === piles.length) {
+      piles.push(i);
+    } else {
+      piles[left] = i;
+    }
+  }
+  // Reconstruct LIS
+  let lis: number[] = [];
+  if (piles.length > 0) {
+    let k = piles[piles.length - 1];
+    while (k >= 0) {
+      lis.push(k);
+      k = predecessors[k];
+    }
+    lis.reverse();
+  }
+  // Indices in currentOrder that are part of the LIS (already in correct relative order)
+  const lisSet = new Set(lis);
+
+  // Plan moves for items not in LIS
   let working = [...currentOrder];
+  const moves: MoveOperation[] = [];
+  // Build a set of videoIds in LIS for quick lookup
+  const lisIds = new Set(lis.map(idx => currentOrder[idx]));
+  // For each item in desiredOrder, if not in LIS, move it to the correct position
   for (let targetIdx = 0; targetIdx < desiredOrder.length; targetIdx++) {
     const vid = desiredOrder[targetIdx];
+    if (lisIds.has(vid)) continue; // already in correct place
     const curIdx = working.indexOf(vid);
-    if (curIdx === targetIdx) continue; // already in place
+    // Move it after the previous item in desiredOrder (or to front)
+    const afterVideoId = targetIdx === 0 ? null : working[working.indexOf(desiredOrder[targetIdx - 1])];
     // Remove from current position
     working.splice(curIdx, 1);
     // Insert at targetIdx
-    working.splice(targetIdx, 0, vid);
-    // Determine afterVideoId (null if at front)
-    const afterVideoId = targetIdx === 0 ? null : working[targetIdx - 1];
+    const insertIdx = afterVideoId === null ? 0 : working.indexOf(afterVideoId) + 1;
+    working.splice(insertIdx, 0, vid);
     moves.push({ videoId: vid, afterVideoId });
   }
   return moves;
