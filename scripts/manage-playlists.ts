@@ -43,6 +43,7 @@ async function exportPlaylistItemsToCsv(
     return {
       position: item.position,
       videoId: item.videoId,
+      playlistItemId: (item as any).playlistItemId || '',
       title: item.title,
       privacyStatus: v.privacyStatus || '',
       originalFileDate: v.originalFileDate || '',
@@ -51,7 +52,7 @@ async function exportPlaylistItemsToCsv(
       lastUpdated: v.lastUpdated || ''
     };
   });
-  const csv = json2csv(rows, { fields: ['position', 'videoId', 'title', 'privacyStatus', 'originalFileDate', 'recordingDate', 'publishedAt', 'lastUpdated'] });
+  const csv = json2csv(rows, { fields: ['position', 'videoId', 'playlistItemId', 'title', 'privacyStatus', 'originalFileDate', 'recordingDate', 'publishedAt', 'lastUpdated'] });
   await require('fs-extra').writeFile(outputFile, csv, 'utf8');
 }
 
