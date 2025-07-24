@@ -1,0 +1,137 @@
+import { getMinimalMoveOperations, performMoveOperations } from '../src/utils/playlist-sort-ops';
+
+type PlaylistItem = { videoId: string; originalFileDate: string };
+
+// Data from ob-1-before.csv (videoId, originalFileDate)
+const obBefore: PlaylistItem[] = [
+  { videoId: 'NWSMmKOj23s', originalFileDate: '2025-01-30T21:36:00Z' },
+  { videoId: 'CVUE8GYW4dY', originalFileDate: '2025-03-08T12:10:00Z' },
+  { videoId: '4zsfnanx6C0', originalFileDate: '2025-03-09T07:33:00Z' },
+  { videoId: 'YCOSHpOrxyE', originalFileDate: '2025-03-09T19:22:32.020Z' },
+  { videoId: 'bPpmlLY7eow', originalFileDate: '2025-03-12T22:13:00Z' },
+  { videoId: 'yz7f79udQ7A', originalFileDate: '2025-03-13T08:07:00Z' },
+  { videoId: 'Bfk-7zb9Q9o', originalFileDate: '2025-03-14T15:37:43.270Z' },
+  { videoId: 'YlvpNVcN-GY', originalFileDate: '2025-07-03T09:05:00Z' },
+  { videoId: 'cz0f8HGGMSA', originalFileDate: '2025-07-03T09:16:00Z' },
+  { videoId: 'nDVPFztGO0U', originalFileDate: '2025-07-03T09:18:00Z' },
+  { videoId: 'W89gO4f-I3c', originalFileDate: '2025-07-03T09:27:00Z' },
+  { videoId: '53G-2nK3kRc', originalFileDate: '2025-07-03T09:45:00Z' },
+  { videoId: 'weEbdjLgjlo', originalFileDate: '2025-07-03T09:57:00Z' },
+  { videoId: 'ErL43_L2Lng', originalFileDate: '2025-07-03T11:48:00Z' },
+  { videoId: 'F97UX6o1U6M', originalFileDate: '2025-07-03T12:02:00Z' },
+  { videoId: '0wcqbbNyri0', originalFileDate: '2025-07-02T12:41:00Z' },
+  { videoId: 'uuTnhSemHcA', originalFileDate: '2025-07-02T12:48:00Z' },
+  { videoId: 'm3RTyFH99ZA', originalFileDate: '2025-07-02T12:11:00Z' },
+  { videoId: '5yeOTi20yS4', originalFileDate: '2025-07-02T12:23:00Z' },
+  { videoId: 'urq3a_snYeo', originalFileDate: '2025-07-01T09:11:00Z' },
+  { videoId: 'He2LTbWNIaY', originalFileDate: '2025-07-01T09:19:00Z' },
+  { videoId: 'TPWbiI14QhU', originalFileDate: '2025-07-01T19:42:00Z' },
+  { videoId: '5q5ZqooPlBo', originalFileDate: '2025-03-14T17:58:56.040Z' },
+  { videoId: '3V9d-nRI7Hs', originalFileDate: '2025-03-14T19:59:37.070Z' },
+  { videoId: 'kJfIkBRI0yM', originalFileDate: '2025-03-14T22:47:00Z' },
+  { videoId: 'RNoeNpQIGA4', originalFileDate: '2025-03-15T10:16:00Z' },
+  { videoId: '0MTxJqwJxGQ', originalFileDate: '2025-03-15T14:36:00Z' },
+  { videoId: 'GSAveCazhlU', originalFileDate: '2025-03-15T15:18:00Z' },
+  { videoId: 'bEeJzBdt5lM', originalFileDate: '2025-03-15T15:20:00Z' },
+  { videoId: 't2i5_gRzDpg', originalFileDate: '2025-03-15T15:59:00Z' },
+  { videoId: 'v7rZYoLUaBo', originalFileDate: '2025-03-15T17:34:00Z' },
+  { videoId: 'tNP-iOmPWQ0', originalFileDate: '2025-03-15T17:46:29.060Z' },
+  { videoId: 'YGFRM1rBLno', originalFileDate: '2025-03-16T00:11:25.130Z' },
+  { videoId: 'nlyqAbvGFuU', originalFileDate: '2025-04-15T16:16:13.030Z' },
+  { videoId: 'XvatafTGTK8', originalFileDate: '2025-03-16T12:04:01.110Z' },
+  { videoId: 'TgMVmU_vD3E', originalFileDate: '2025-04-15T16:27:44.050Z' },
+  { videoId: 'N81iMuduv2Y', originalFileDate: '2025-06-10T14:38:42.120Z' },
+  { videoId: 'n8IjUZrIA1U', originalFileDate: '2025-04-15T16:59:32.160Z' },
+  { videoId: 'gTpGJSIjbVo', originalFileDate: '2025-03-21T21:03:00Z' },
+  { videoId: '_pXbUc87uuc', originalFileDate: '2025-04-15T17:35:17.180Z' },
+  { videoId: 'ijSRlv-YzKg', originalFileDate: '2025-06-10T15:21:56.260Z' },
+  { videoId: 'hO-WXFJcOFs', originalFileDate: '2025-04-16T16:52:12.020Z' },
+  { videoId: 'zobiz8w8vwY', originalFileDate: '2025-06-24T08:56:00Z' },
+  { videoId: 'Q_0ClMHrFt4', originalFileDate: '2025-05-05T19:00:00Z' },
+  { videoId: 'HMw5MY-0JR0', originalFileDate: '2025-06-24T10:00:00Z' },
+  { videoId: 'lyD0RLwwZEU', originalFileDate: '2025-05-05T23:35:00Z' },
+  { videoId: '2fZL1fjtgDU', originalFileDate: '2025-06-24T13:07:00Z' },
+  { videoId: 'Z_288NuHelI', originalFileDate: '2025-06-24T17:24:00Z' },
+  { videoId: 'S5S6SHz-7Es', originalFileDate: '2025-07-01T17:51:00Z' },
+  { videoId: 'BP-WqgdR9r4', originalFileDate: '2025-06-26T12:20:00Z' },
+  { videoId: 'zsKNb2LJRtk', originalFileDate: '2025-06-26T19:30:00Z' },
+  { videoId: 'ZCsc8Ws620Q', originalFileDate: '2025-06-26T19:42:00Z' },
+  { videoId: 'qSKFOYUEjjA', originalFileDate: '2025-06-26T19:50:00Z' },
+  { videoId: 'CAdvFIAsSgo', originalFileDate: '2025-06-26T19:59:00Z' },
+  { videoId: 'seIDtkOUo1E', originalFileDate: '2025-06-28T10:35:00Z' },
+  { videoId: 'DjLL83LE1CE', originalFileDate: '2025-06-29T08:47:00Z' },
+  { videoId: '0q6BjfrWLYk', originalFileDate: '2025-06-29T08:50:00Z' },
+  { videoId: 'UFv1LxOvu08', originalFileDate: '2025-06-29T11:23:00Z' },
+  { videoId: 'aUFxyXlB-po', originalFileDate: '2025-06-29T11:33:00Z' },
+  { videoId: 'ddLmMi1pf5U', originalFileDate: '2025-06-29T11:43:00Z' },
+  { videoId: '62cJyMEPiBo', originalFileDate: '2025-06-29T11:47:00Z' },
+  { videoId: 'NaMYYmyxUR4', originalFileDate: '2025-06-29T12:00:00Z' },
+  { videoId: '2JYV0usbVTw', originalFileDate: '2025-06-29T12:23:00Z' },
+  { videoId: 'dryvq4Eof58', originalFileDate: '2025-06-29T12:33:00Z' },
+  { videoId: 'EXmm6PiKunE', originalFileDate: '2025-06-29T13:19:00Z' },
+  { videoId: '2-es8nx-0sM', originalFileDate: '2025-05-05T23:44:00Z' },
+  { videoId: 'dTlz8eCxtXY', originalFileDate: '2025-07-01T18:46:00Z' },
+  { videoId: 'F1811EQjzJg', originalFileDate: '2025-05-06T00:50:00Z' },
+  { videoId: 'g3gC5vgwJ78', originalFileDate: '2025-06-30T09:41:00Z' },
+  { videoId: 'No5ug2-FfRc', originalFileDate: '2025-05-06T15:34:00.130Z' },
+  { videoId: '0jR7F02OrTE', originalFileDate: '2025-06-30T09:53:00Z' },
+  { videoId: 'WZVckazCb1Q', originalFileDate: '2025-05-06T15:46:00Z' },
+  { videoId: 'MOf3jzCCbK4', originalFileDate: '2025-06-30T10:02:00Z' },
+  { videoId: 'FM4fjOKo3-4', originalFileDate: '2025-05-06T15:55:00Z' },
+  { videoId: 'XxM5KsTnxSU', originalFileDate: '2025-06-30T10:08:00Z' },
+  { videoId: '8jMnHAdoEaU', originalFileDate: '2025-05-06T15:55:50.200Z' },
+  { videoId: 'weHJju0wutA', originalFileDate: '2025-06-30T10:15:00Z' },
+  { videoId: 'g7ad7yNu8qo', originalFileDate: '2025-05-06T16:00:00Z' },
+  { videoId: 'Km2Rjnc7Slw', originalFileDate: '2025-06-30T10:25:00Z' },
+  { videoId: 'sz-t7YWxzDI', originalFileDate: '2025-05-06T16:15:39.250Z' },
+  { videoId: 'h3m9KQSbwAs', originalFileDate: '2025-06-30T10:32:00Z' },
+  { videoId: 'FZtU1OOlh14', originalFileDate: '2025-05-08T14:50:29.040Z' },
+  { videoId: 'TYeVRbdJ9Tw', originalFileDate: '2025-06-30T11:40:00Z' },
+  { videoId: 'T0F4uLlHzNY', originalFileDate: '2025-05-08T16:01:19.070Z' },
+  { videoId: 'DBLNI4qLXLI', originalFileDate: '2025-06-30T13:11:00Z' },
+  { videoId: 'OLOuXxZhFrI', originalFileDate: '2025-05-08T19:25:00Z' },
+  { videoId: '7XjHwckiAUE', originalFileDate: '2025-06-30T12:07:00Z' },
+  { videoId: '6FFgn72554Y', originalFileDate: '2025-05-08T19:31:00Z' },
+  { videoId: 'zHeU6BEpZ6A', originalFileDate: '2025-05-09T21:00:23.030Z' },
+  { videoId: '6cbRORoXGJc', originalFileDate: '2025-05-09T21:08:00Z' },
+  { videoId: 'RKuRAeQRKC8', originalFileDate: '2025-06-30T12:30:00Z' },
+  { videoId: '_UbMuvGuBYw', originalFileDate: '2025-05-10T18:21:13.210Z' },
+  { videoId: 'H0iSwGasfgM', originalFileDate: '2025-06-30T14:44:00Z' },
+  { videoId: 'ssC1F6tre7k', originalFileDate: '2025-05-20T18:18:53.070Z' },
+  { videoId: 'mfKs4E6_gsM', originalFileDate: '2025-06-30T14:32:00Z' },
+  { videoId: '0iJmldZWvu8', originalFileDate: '2025-05-25T11:40:49.020Z' },
+  { videoId: 'FKQLKqMC8wY', originalFileDate: '2025-06-30T13:36:00Z' },
+  { videoId: 'bJCkVHoK7w4', originalFileDate: '2025-06-30T15:18:00Z' },
+  { videoId: '9ujy489DqCw', originalFileDate: '2025-06-30T15:46:00Z' },
+  { videoId: 'P-BljpjLLgQ', originalFileDate: '2025-06-30T13:38:00Z' },
+  { videoId: 'fCZDPWx1tjk', originalFileDate: '2025-06-30T12:59:00Z' },
+  { videoId: 'dmoV9BkogS0', originalFileDate: '2025-06-29T13:26:00Z' }
+];
+
+// Desired order: sort by originalFileDate ascending
+const obDesired = [...obBefore].sort((a, b) => a.originalFileDate.localeCompare(b.originalFileDate));
+
+const beforeIds = obBefore.map(x => x.videoId);
+const afterIds = obDesired.map(x => x.videoId);
+
+describe('getMinimalMoveOperations (ob-1-before.csv)', () => {
+  it('produces a minimal set of moves to reach desired order (ob-1-before.csv)', () => {
+    const moves = getMinimalMoveOperations(beforeIds, afterIds);
+    // Print moves for visibility
+    console.log('Moves to reach desired order:');
+    moves.forEach((move, i) => {
+      if (move.afterVideoId === null) {
+        console.log(`${i + 1}. Move ${move.videoId} to the front`);
+      } else {
+        console.log(`${i + 1}. Move ${move.videoId} after ${move.afterVideoId}`);
+      }
+    });
+    // Apply moves to array of objects
+    const arr = [...obBefore];
+    performMoveOperations(arr, moves);
+    const result = arr.map(x => x.videoId);
+    expect(result).toEqual(afterIds);
+    // Should be minimal
+    expect(moves.length).toBeLessThanOrEqual(beforeIds.length - 1);
+  });
+});
