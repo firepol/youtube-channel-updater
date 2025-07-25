@@ -1,3 +1,52 @@
+import { before as oaBefore, after as oaAfter } from './oa-before-after-data';
+describe('PlaylistManager.sortAndApplyMoves (OA minimal-move dataset)', () => {
+  let playlistManager: PlaylistManager;
+  let mockConfig: PlaylistConfig;
+  let getLogger: any;
+
+  beforeEach(() => {
+    mockConfig = { playlists: [{ id: 'OA', title: 'OA Playlist', keywords: [] }] };
+    playlistManager = new PlaylistManager({} as any, mockConfig);
+    playlistManager.writePlaylistCache = false;
+    playlistManager.doYoutubeApiCalls = false;
+    getLogger = () => ({
+      info: vi.fn(),
+      warning: vi.fn(),
+      error: vi.fn(),
+    });
+  });
+
+  it('sorts OA playlistCache to match expected after order', async () => {
+    // Prepare playlistCache with OA before data
+    const playlistCache = {
+      id: 'OA',
+      title: 'OA Playlist',
+      description: '',
+      privacyStatus: 'public',
+      itemCount: oaBefore.length,
+      items: oaBefore.map((item, idx) => ({
+        position: idx,
+        videoId: item.videoId,
+        title: '',
+        publishedAt: item.originalFileDate,
+      })),
+    };
+    // Run sortAndApplyMoves (date = originalFileDate)
+    const result = await playlistManager.sortAndApplyMoves({
+      playlistCache,
+      sortField: 'date',
+      dryRun: false,
+      getLogger: getLogger,
+    });
+    // The playlistCache.items should now match the after order by videoId
+    const resultOrder = playlistCache.items.map(i => i.videoId);
+    const expectedOrder = oaAfter.map(i => i.videoId);
+    expect(resultOrder).toEqual(expectedOrder);
+    // Should not lose or duplicate any items
+    expect(new Set(resultOrder).size).toBe(resultOrder.length);
+    expect(new Set(resultOrder)).toEqual(new Set(expectedOrder));
+  });
+});
 describe('PlaylistManager.sortAndApplyMoves (dryRun vs live, in-memory)', () => {
   let playlistManager: PlaylistManager;
   let mockConfig: PlaylistConfig;
