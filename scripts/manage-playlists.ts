@@ -277,6 +277,40 @@ class PositionCalculator {
 
 class PlaylistManager {
   /**
+   * Find the correct insert position for a video in a playlist based on date logic
+   * Returns the index where the video should be inserted (0 = front, items.length = end)
+   * Accepts: videoId, playlistItems, videoDb, fallbackDate
+   * Uses the same date logic as sortPlaylistItems
+   */
+  public findInsertPosition(
+    videoId: string,
+    playlistItems: Array<{ videoId: string; publishedAt?: string }>,
+    videoDb: Record<string, { originalFileDate?: string; recordingDate?: string; publishedAt?: string }>,
+    fallbackDate?: string
+  ): number {
+    const newVideoDate = this.getBestVideoDate(videoId, videoDb, fallbackDate);
+    // For all playlist items:
+    const playlistItemsWithDates = playlistItems.map(item => ({
+      ...item,
+      _sortDate: this.getBestVideoDate(item.videoId, videoDb, item.publishedAt)
+    }));
+    // Sort playlist items chronologically (oldest first)
+    const sortedItems = playlistItemsWithDates.sort((a, b) => {
+      return new Date(a._sortDate).getTime() - new Date(b._sortDate).getTime();
+    });
+    // Find the correct position for the new video
+    let position = sortedItems.length;
+    const newVideoTime = new Date(newVideoDate).getTime();
+    for (let i = 0; i < sortedItems.length; i++) {
+      const itemTime = new Date(sortedItems[i]._sortDate).getTime();
+      if (newVideoTime <= itemTime) {
+        position = i;
+        break;
+      }
+    }
+    return position;
+  }
+  /**
    * If false, do not write playlist cache to disk (for tests/dry run)
    */
   public writePlaylistCache: boolean = true;
@@ -765,28 +799,13 @@ class PlaylistManager {
         }
         // === End duplicate check ===
 
-        // === Calculate position using robust date logic ===
-        // For the new video:
-        const newVideoDate = this.getBestVideoDate(video.id, videoDb, video.publishedAt);
-        // For all playlist items:
-        const playlistItemsWithDates = playlistCache.items.map(item => ({
-          ...item,
-          _sortDate: this.getBestVideoDate(item.videoId, videoDb, item.publishedAt)
-        }));
-        // Sort playlist items chronologically (oldest first)
-        const sortedItems = playlistItemsWithDates.sort((a, b) => {
-          return new Date(a._sortDate).getTime() - new Date(b._sortDate).getTime();
-        });
-        // Find the correct position for the new video
-        let position = sortedItems.length;
-        const newVideoTime = new Date(newVideoDate).getTime();
-        for (let i = 0; i < sortedItems.length; i++) {
-          const itemTime = new Date(sortedItems[i]._sortDate).getTime();
-          if (newVideoTime <= itemTime) {
-            position = i;
-            break;
-          }
-        }
+        // === Calculate position using unified helper ===
+        const position = this.findInsertPosition(
+          video.id,
+          playlistCache.items,
+          videoDb,
+          video.publishedAt
+        );
 
         // Add to playlist
         const result = await this.addVideoToPlaylist(video.id, playlist.id, position, options);
