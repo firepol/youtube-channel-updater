@@ -337,7 +337,8 @@ class PlaylistManager {
     applied: number,
     resultOrder: string[],
     desiredOrder: string[],
-    log: string[]
+    log: string[],
+    error?: string | null
   }> {
     const log: string[] = [];
     // 1. Sort items
@@ -345,19 +346,15 @@ class PlaylistManager {
     const desiredOrder = sortedItems.map(item => item.videoId);
     const currentOrder = playlistCache.items.map(item => item.videoId);
     // 2. Calculate minimal moves
-    const { getMinimalMoveOperations, performMoveOperations } = await import('../src/utils/playlist-sort-ops');
+    const { getMinimalMoveOperations } = await import('../src/utils/playlist-sort-ops');
     const moves = getMinimalMoveOperations(currentOrder, desiredOrder);
     log.push(`[sortAndApplyMoves] Calculated ${moves.length} minimal moves.`);
     if (moves.length === 0) {
       log.push('No moves needed.');
       return { moves, totalMoves: 0, applied: 0, resultOrder: currentOrder, desiredOrder, log };
     }
-    // 3. Apply moves in-memory
+    // 3. Apply moves in-memory and print/log each move as it happens
     let arr = [...playlistCache.items];
-    performMoveOperations(arr, moves);
-    // 4. Optionally apply moves via API and update cache
-    // Always apply moves in-memory and log them
-    let applied = 0;
     // Map videoId to playlistItemId from cache (needed for API calls)
     const idMap: Record<string, string> = {};
     for (const item of playlistCache.items) {
@@ -365,36 +362,48 @@ class PlaylistManager {
         idMap[item.videoId] = (item as any).playlistItemId;
       }
     }
+    let applied = 0;
+    let errorToShow: string | null = null;
     for (let i = 0; i < moves.length; i++) {
       const move = moves[i];
       const playlistItemId = idMap[move.videoId];
       const afterIdx = move.afterVideoId === null ? -1 : arr.findIndex(x => x.videoId === move.afterVideoId);
       const newPosition = afterIdx + 1;
       if (!playlistItemId) {
-        log.push(`No playlistItemId in cache for videoId=${move.videoId}. Skipping move.`);
+        const msg = `No playlistItemId in cache for videoId=${move.videoId}. Skipping move.`;
+        log.push(msg);
+        if (getLogger) getLogger().warning(msg);
         continue;
       }
       // Always update local cache: move the item in arr
       const curIdx = arr.findIndex(x => x.videoId === move.videoId);
       if (curIdx === -1) {
-        log.push(`Could not find videoId=${move.videoId} in playlist for move. Skipping.`);
+        const msg = `Could not find videoId=${move.videoId} in playlist for move. Skipping.`;
+        log.push(msg);
+        if (getLogger) getLogger().warning(msg);
         continue;
       }
       const [moved] = arr.splice(curIdx, 1);
       arr.splice(newPosition, 0, moved);
       arr.forEach((item, idx) => (item.position = idx));
       playlistCache.items = [...arr];
-      // Log the move
-      log.push(`Moved videoId=${move.videoId} (playlistItemId=${playlistItemId}) to position ${newPosition}`);
-      // Only call YouTube API if enabled and not dryRun
-      if (!dryRun && this.doYoutubeApiCalls && youtubeClient) {
+      // Print/log the move immediately
+      const moveMsg = move.afterVideoId === null
+        ? `Move ${move.videoId} to the front (position 0)`
+        : `Move ${move.videoId} after ${move.afterVideoId} (to position ${newPosition})`;
+      if (getLogger) getLogger().info(moveMsg);
+      log.push(moveMsg);
+      // Only call YouTube API if enabled, not dryRun, and no previous error
+      if (!dryRun && this.doYoutubeApiCalls && youtubeClient && !errorToShow) {
         try {
           await youtubeClient.updatePlaylistItemPosition(playlistItemId, newPosition);
           applied++;
         } catch (err: any) {
           const errMsg = err && err.message ? err.message : String(err);
-          if (getLogger) getLogger().error(`Failed to move playlistItemId=${playlistItemId} for videoId=${move.videoId}:`, err);
+          if (getLogger) getLogger().error(`Failed to move playlistItemId=${playlistItemId} for videoId=${move.videoId}: ${errMsg}`);
           log.push(`Failed to move playlistItemId=${playlistItemId} for videoId=${move.videoId}: ${errMsg}`);
+          errorToShow = errMsg;
+          break;
         }
       }
     }
@@ -404,7 +413,7 @@ class PlaylistManager {
       await this.savePlaylistCache(playlistCache.id, playlistCache);
     }
     const resultOrder = arr.map(x => x.videoId);
-    return { moves, totalMoves: moves.length, applied, resultOrder, desiredOrder, log };
+    return { moves, totalMoves: moves.length, applied, resultOrder, desiredOrder, log, error: errorToShow };
   }
   /**
    * Find the correct insert position for a video in a playlist based on date logic
@@ -1546,6 +1555,10 @@ async function main(): Promise<void> {
         dryRun: options.dryRun,
         getLogger
       });
+      // Display error if present
+      if (summary.error) {
+        getLogger().error(`Error during playlist sort/apply: ${summary.error}`);
+      }
       return;
     }
     // === END SORT LOGIC ===
