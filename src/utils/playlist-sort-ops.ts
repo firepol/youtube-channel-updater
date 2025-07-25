@@ -39,7 +39,6 @@ export function getMinimalMoveOperations(currentOrder: string[], desiredOrder: s
   const n = posInDesired.length;
   const piles: number[] = [];
   const predecessors: number[] = Array(n).fill(-1);
-  const pileTops: number[] = [];
 
   for (let i = 0; i < n; i++) {
     const x = posInDesired[i];
@@ -67,8 +66,6 @@ export function getMinimalMoveOperations(currentOrder: string[], desiredOrder: s
     }
     lis.reverse();
   }
-  // Indices in currentOrder that are part of the LIS (already in correct relative order)
-  const lisSet = new Set(lis);
 
   // Plan moves for items not in LIS
   let working = [...currentOrder];

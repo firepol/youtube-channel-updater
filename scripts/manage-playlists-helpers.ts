@@ -26,7 +26,7 @@ export async function applyMinimalMovesLive({
   targetPlaylist: any;
   getLogger: any;
 }) {
-  const { getMinimalMoveOperations, performMoveOperations } = await import('../src/utils/playlist-sort-ops');
+  const { getMinimalMoveOperations } = await import('../src/utils/playlist-sort-ops');
   // Map videoId to playlistItemId from cache
   const idMap: Record<string, string> = {};
   for (const item of localItems) {
