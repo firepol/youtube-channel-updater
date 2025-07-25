@@ -1376,25 +1376,8 @@ async function main(): Promise<void> {
         getLogger().info(`CSV output written: ${before}`);
       }
       // Build desired order (sorted)
-      let videoDb: Record<string, { originalFileDate?: string; recordingDate?: string; publishedAt: string }> = {};
-      try {
-        const db = await fs.readJson('data/videos.json');
-        for (const v of db) {
-          videoDb[v.id] = { originalFileDate: v.originalFileDate, recordingDate: v.recordingDate, publishedAt: v.publishedAt };
-        }
-      } catch (e) {
-        videoDb = {};
-      }
-      let sortedItems: typeof localItems;
-      if (sortField === 'title') {
-        sortedItems = [...localItems].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
-      } else {
-        sortedItems = [...localItems].sort((a, b) => {
-          const aDate = videoDb[a.videoId]?.originalFileDate || videoDb[a.videoId]?.recordingDate || videoDb[a.videoId]?.publishedAt || a.publishedAt;
-          const bDate = videoDb[b.videoId]?.originalFileDate || videoDb[b.videoId]?.recordingDate || videoDb[b.videoId]?.publishedAt || b.publishedAt;
-          return new Date(aDate).getTime() - new Date(bDate).getTime();
-        });
-      }
+      // Use PlaylistManager.sortPlaylistItems for sorting
+      const sortedItems = playlistManager.sortPlaylistItems(playlistCache, sortField);
       // CSV export: after (planned order)
       if (options.output) {
         const { after } = getCsvOutputFilenames(options.output);
