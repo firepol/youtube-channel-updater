@@ -277,6 +277,14 @@ class PositionCalculator {
 
 class PlaylistManager {
   /**
+   * If false, do not write playlist cache to disk (for tests/dry run)
+   */
+  public writePlaylistCache: boolean = true;
+  /**
+   * If false, do not perform YouTube API calls (for tests/dry run/simulated live)
+   */
+  public doYoutubeApiCalls: boolean = true;
+  /**
    * Helper to get the best date for a videoId from the video database
    * Priority: originalFileDate > recordingDate > publishedAt > fallback
    */
@@ -376,7 +384,7 @@ class PlaylistManager {
    * Save playlist cache to local file
    */
   private async savePlaylistCache(_unused: string, playlist: LocalPlaylist, dryRun = false): Promise<void> {
-    if (dryRun) return;
+    if (dryRun || !this.writePlaylistCache) return;
     await fs.ensureDir(this.playlistsDir);
     const cacheFile = path.join(this.playlistsDir, `${sanitizePlaylistName(playlist.title)}.json`);
     await fs.writeJson(cacheFile, playlist, { spaces: 2 });
