@@ -277,6 +277,45 @@ class PositionCalculator {
 
 class PlaylistManager {
   /**
+   * Unified output for move preview/summary (dry run and live)
+   */
+  public printMoveSummary({
+    summary,
+    playlistTitle,
+    sortField,
+    dryRun = false,
+    getLogger
+  }: {
+    summary: { moves: any[]; totalMoves: number; applied: number; resultOrder: string[]; desiredOrder: string[]; log: string[] },
+    playlistTitle: string,
+    sortField: string,
+    dryRun?: boolean,
+    getLogger: any
+  }) {
+    const prefix = dryRun ? '[DRY RUN] ' : '';
+    getLogger().info(`${prefix}${dryRun ? 'Would sort' : 'Sorted'} playlist '${playlistTitle}' by ${sortField}.`);
+    getLogger().info(`${prefix}Total moves${dryRun ? '' : ' applied'}: ${dryRun ? summary.moves.length : summary.applied} / ${summary.totalMoves}`);
+    getLogger().info(`${prefix}Minimal moves to sort:`);
+    if (summary.moves.length === 0) {
+      getLogger().info(`${prefix}  No moves needed.`);
+    } else {
+      summary.moves.forEach((move, i) => {
+        if (move.afterVideoId === null) {
+          getLogger().info(`${prefix}  ${i + 1}. Move ${move.videoId} to the front`);
+        } else {
+          getLogger().info(`${prefix}  ${i + 1}. Move ${move.videoId} after ${move.afterVideoId}`);
+        }
+      });
+      getLogger().info(`${prefix}Total moves: ${summary.moves.length}`);
+    }
+    if (JSON.stringify(summary.resultOrder) === JSON.stringify(summary.desiredOrder)) {
+      getLogger().info(`${prefix}Resulting order matches desired order.`);
+    } else {
+      getLogger().warning(`${prefix}Resulting order does NOT match desired order!`);
+    }
+    summary.log.forEach(line => getLogger().info(`${prefix}${line}`));
+  }
+  /**
    * Sorts playlist items and applies minimal moves (in-memory and optionally via API/cache)
    * Returns a summary object with move details
    */
@@ -1496,36 +1535,15 @@ async function main(): Promise<void> {
         await exportPlaylistItemsToCsv(playlistCache.items, after);
         getLogger().info(`CSV output written: ${after}`);
       }
-      // Output summary
-      if (options.dryRun) {
-        getLogger().info(`[DRY RUN] Would sort playlist '${targetPlaylist.title}' by ${sortField}.`);
-        getLogger().info(`[DRY RUN] Total items: ${localItems.length}`);
-        getLogger().info(`[DRY RUN] Minimal moves to sort:`);
-        if (summary.moves.length === 0) {
-          getLogger().info('  No moves needed.');
-        } else {
-          summary.moves.forEach((move, i) => {
-            if (move.afterVideoId === null) {
-              getLogger().info(`  ${i + 1}. Move ${move.videoId} to the front`);
-            } else {
-              getLogger().info(`  ${i + 1}. Move ${move.videoId} after ${move.afterVideoId}`);
-            }
-          });
-          getLogger().info(`Total moves: ${summary.moves.length}`);
-        }
-        if (JSON.stringify(summary.resultOrder) === JSON.stringify(summary.desiredOrder)) {
-          getLogger().info('[DRY RUN] Resulting order matches desired order.');
-        } else {
-          getLogger().warning('[DRY RUN] Resulting order does NOT match desired order!');
-        }
-        summary.log.forEach(line => getLogger().info(`[DRY RUN] ${line}`));
-        return;
-      } else {
-        getLogger().info(`Sorted playlist '${targetPlaylist.title}' by ${sortField}.`);
-        getLogger().info(`Total moves applied: ${summary.applied} / ${summary.totalMoves}`);
-        summary.log.forEach(line => getLogger().info(line));
-        return;
-      }
+      // Output summary (dry run or live) using unified helper
+      playlistManager.printMoveSummary({
+        summary,
+        playlistTitle: targetPlaylist.title,
+        sortField,
+        dryRun: options.dryRun,
+        getLogger
+      });
+      return;
     }
     // === END SORT LOGIC ===
 
