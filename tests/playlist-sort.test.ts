@@ -1,3 +1,69 @@
+describe('PlaylistManager.sortAndApplyMoves (dryRun vs live, in-memory)', () => {
+  let playlistManager: PlaylistManager;
+  let mockConfig: PlaylistConfig;
+  let playlist: LocalPlaylist;
+  let items: LocalPlaylistItem[];
+  let getLogger: any;
+
+  beforeEach(() => {
+    mockConfig = { playlists: [{ id: 'PLMOCK', title: 'Mock Playlist', keywords: [] }] };
+    playlistManager = new PlaylistManager({} as any, mockConfig);
+    playlistManager.writePlaylistCache = false;
+    playlistManager.doYoutubeApiCalls = false;
+    // Unsorted items
+    items = [
+      { position: 2, videoId: 'c', title: 'C', publishedAt: '2022-01-03T00:00:00Z' },
+      { position: 0, videoId: 'a', title: 'A', publishedAt: '2022-01-01T00:00:00Z' },
+      { position: 1, videoId: 'b', title: 'B', publishedAt: '2022-01-02T00:00:00Z' },
+    ];
+    playlist = {
+      id: 'PLMOCK',
+      title: 'Mock Playlist',
+      description: '',
+      privacyStatus: 'public',
+      itemCount: items.length,
+      items: items.map(i => ({ ...i })),
+    };
+    getLogger = () => ({
+      info: vi.fn(),
+      warning: vi.fn(),
+      error: vi.fn(),
+    });
+  });
+
+  it('produces the same in-memory playlist order and logs in dryRun and live mode', async () => {
+    // Clone playlist for dryRun and live
+    const dryRunCache = JSON.parse(JSON.stringify(playlist));
+    const liveCache = JSON.parse(JSON.stringify(playlist));
+
+    // Dry run
+    const dryRunResult = await playlistManager.sortAndApplyMoves({
+      playlistCache: dryRunCache,
+      sortField: 'date',
+      dryRun: true,
+      getLogger: getLogger,
+    });
+
+    // Live (no API, no cache write)
+    const liveResult = await playlistManager.sortAndApplyMoves({
+      playlistCache: liveCache,
+      sortField: 'date',
+      dryRun: false,
+      getLogger: getLogger,
+    });
+
+    // The resulting in-memory playlist order should be the same
+    expect(dryRunCache.items.map(i => i.videoId)).toEqual(liveCache.items.map(i => i.videoId));
+    // The logs should be the same (except for possible differences in applied count)
+    expect(dryRunResult.moves).toEqual(liveResult.moves);
+    expect(dryRunResult.resultOrder).toEqual(liveResult.resultOrder);
+    expect(dryRunResult.desiredOrder).toEqual(liveResult.desiredOrder);
+    // The log messages should be the same except for applied count
+    const logDry = dryRunResult.log.map(l => l.replace(/applied: \d+/, 'applied: X'));
+    const logLive = liveResult.log.map(l => l.replace(/applied: \d+/, 'applied: X'));
+    expect(logDry).toEqual(logLive);
+  });
+});
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import fs from 'fs-extra';
 import { PlaylistManager } from '../scripts/manage-playlists';
