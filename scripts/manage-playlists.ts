@@ -356,36 +356,40 @@ class PlaylistManager {
     let arr = [...playlistCache.items];
     performMoveOperations(arr, moves);
     // 4. Optionally apply moves via API and update cache
+    // Always apply moves in-memory and log them
     let applied = 0;
-    if (!dryRun && this.doYoutubeApiCalls && youtubeClient) {
-      // Map videoId to playlistItemId from cache
-      const idMap: Record<string, string> = {};
-      for (const item of playlistCache.items) {
-        if ((item as any).playlistItemId) {
-          idMap[item.videoId] = (item as any).playlistItemId;
-        }
+    // Map videoId to playlistItemId from cache (needed for API calls)
+    const idMap: Record<string, string> = {};
+    for (const item of playlistCache.items) {
+      if ((item as any).playlistItemId) {
+        idMap[item.videoId] = (item as any).playlistItemId;
       }
-      for (let i = 0; i < moves.length; i++) {
-        const move = moves[i];
-        const playlistItemId = idMap[move.videoId];
-        const afterIdx = move.afterVideoId === null ? -1 : arr.findIndex(x => x.videoId === move.afterVideoId);
-        const newPosition = afterIdx + 1;
-        if (!playlistItemId) {
-          log.push(`No playlistItemId in cache for videoId=${move.videoId}. Skipping move.`);
-          continue;
-        }
+    }
+    for (let i = 0; i < moves.length; i++) {
+      const move = moves[i];
+      const playlistItemId = idMap[move.videoId];
+      const afterIdx = move.afterVideoId === null ? -1 : arr.findIndex(x => x.videoId === move.afterVideoId);
+      const newPosition = afterIdx + 1;
+      if (!playlistItemId) {
+        log.push(`No playlistItemId in cache for videoId=${move.videoId}. Skipping move.`);
+        continue;
+      }
+      // Always update local cache: move the item in arr
+      const curIdx = arr.findIndex(x => x.videoId === move.videoId);
+      if (curIdx === -1) {
+        log.push(`Could not find videoId=${move.videoId} in playlist for move. Skipping.`);
+        continue;
+      }
+      const [moved] = arr.splice(curIdx, 1);
+      arr.splice(newPosition, 0, moved);
+      arr.forEach((item, idx) => (item.position = idx));
+      playlistCache.items = [...arr];
+      // Log the move
+      log.push(`Moved videoId=${move.videoId} (playlistItemId=${playlistItemId}) to position ${newPosition}`);
+      // Only call YouTube API if enabled and not dryRun
+      if (!dryRun && this.doYoutubeApiCalls && youtubeClient) {
         try {
           await youtubeClient.updatePlaylistItemPosition(playlistItemId, newPosition);
-          log.push(`Moved videoId=${move.videoId} (playlistItemId=${playlistItemId}) to position ${newPosition}`);
-          // Update local cache: move the item in arr
-          const curIdx = arr.findIndex(x => x.videoId === move.videoId);
-          const [moved] = arr.splice(curIdx, 1);
-          arr.splice(newPosition, 0, moved);
-          arr.forEach((item, idx) => (item.position = idx));
-          playlistCache.items = [...arr];
-          if (this.writePlaylistCache) {
-            await this.savePlaylistCache(playlistCache.id, playlistCache);
-          }
           applied++;
         } catch (err: any) {
           const errMsg = err && err.message ? err.message : String(err);
@@ -393,12 +397,11 @@ class PlaylistManager {
           log.push(`Failed to move playlistItemId=${playlistItemId} for videoId=${move.videoId}: ${errMsg}`);
         }
       }
-    } else {
-      // Just update in-memory and optionally cache
-      playlistCache.items = [...arr];
-      if (!dryRun && this.writePlaylistCache) {
-        await this.savePlaylistCache(playlistCache.id, playlistCache);
-      }
+    }
+    // Always update playlist cache in-memory, and optionally write to disk
+    playlistCache.items = [...arr];
+    if (!dryRun && this.writePlaylistCache) {
+      await this.savePlaylistCache(playlistCache.id, playlistCache);
     }
     const resultOrder = arr.map(x => x.videoId);
     return { moves, totalMoves: moves.length, applied, resultOrder, desiredOrder, log };
