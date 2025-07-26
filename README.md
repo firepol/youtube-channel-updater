@@ -454,6 +454,7 @@ npx tsx scripts/manage-playlists.ts [options]
 - `npm run manage-playlists -- --refresh-cache` - Refresh playlist cache
 - `npm run manage-playlists -- --privacy-status unlisted --dry-run` - Preview unlisted video playlist assignments
 - `npm run manage-playlists -- --title-contains "DZ" --min-views 1000 --dry-run` - Preview high-view DZ video assignments
+- `npm run manage-playlists -- --orphans --dry-run --output logs/assignments.json` - Preview orphan video assignments
 
 **Features**:
 - Keyword-based playlist matching
