@@ -1332,12 +1332,18 @@ async function main(): Promise<void> {
       const playlistsDir = path.join('data', 'playlists');
       const playlistFiles = (await fs.pathExists(playlistsDir)) ? await fs.readdir(playlistsDir) : [];
       const playlistVideoIds = new Set<string>();
+      // Build a map of videoId to playlists it is in
+      const videoIdToPlaylists: Record<string, string[]> = {};
       for (const file of playlistFiles) {
         if (file.endsWith('.json')) {
           const playlist = await fs.readJson(path.join(playlistsDir, file));
           if (playlist.items && Array.isArray(playlist.items)) {
             for (const item of playlist.items) {
-              if (item.videoId) playlistVideoIds.add(item.videoId);
+              if (item.videoId) {
+                playlistVideoIds.add(item.videoId);
+                if (!videoIdToPlaylists[item.videoId]) videoIdToPlaylists[item.videoId] = [];
+                videoIdToPlaylists[item.videoId].push(playlist.title || playlist.id || '');
+              }
             }
           }
         }
@@ -1361,6 +1367,34 @@ async function main(): Promise<void> {
         }
       }
       videos = orphans;
+
+      // === CSV EXPORT FOR ORPHANS ===
+      if (options.output) {
+        const csvFile = options.output.endsWith('.json') ? options.output.replace(/\.json$/, '.csv') : options.output + '.csv';
+        // For each orphan, determine assignments and playlists (simulate matching)
+        const config = await loadConfig();
+        const matcher = new PlaylistMatcher();
+        const allPlaylists = config.playlists.playlists;
+        const rows = orphans.map(v => {
+          // Find all playlists this orphan would be assigned to
+          const matched = allPlaylists.filter(p => matcher.matchesPlaylist(v.title, p.keywords));
+          const assignments = matched.length;
+          const playlistNames = matched.map(p => p.title).join(',');
+          return {
+            videoId: v.id,
+            title: v.title,
+            originalFileDate: v.originalFileDate || '',
+            assignments,
+            playlists: assignments > 0 ? `"${playlistNames}"` : ''
+          };
+        });
+        // CSV header: videoId, title, originalFileDate, assignments, playlists
+        const csvHeader = 'videoId,title,originalFileDate,assignments,playlists\n';
+        const csvRows = rows.map(r => `${r.videoId},"${r.title.replace(/"/g, '""')}",${r.originalFileDate},${r.assignments},${r.playlists}`);
+        const csvContent = csvHeader + csvRows.join('\n');
+        await fs.writeFile(csvFile, csvContent, 'utf8');
+        getLogger().info(`Orphans CSV output written: ${csvFile}`);
+      }
     }
     // === END ORPHANS LOGIC ===
     else if (options.videoId) {
