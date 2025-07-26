@@ -353,8 +353,18 @@ class PlaylistManager {
       log.push('No moves needed.');
       return { moves, totalMoves: 0, applied: 0, resultOrder: currentOrder, desiredOrder, log };
     }
-    // 3. Apply moves in-memory and print/log each move as it happens
+    // 3. Apply moves in-memory using performMoveOperations (restoring previous logic)
     let arr = [...playlistCache.items];
+    const { performMoveOperations } = await import('../src/utils/playlist-sort-ops');
+    performMoveOperations(arr, moves);
+    // Log each move as it happens (simulate immediate feedback)
+    for (const move of moves) {
+      const moveMsg = move.afterVideoId === null
+        ? `Move ${move.videoId} to the front`
+        : `Move ${move.videoId} after ${move.afterVideoId}`;
+      if (getLogger) getLogger().info(moveMsg);
+      log.push(moveMsg);
+    }
     // Map videoId to playlistItemId from cache (needed for API calls)
     const idMap: Record<string, string> = {};
     for (const item of playlistCache.items) {
@@ -364,37 +374,20 @@ class PlaylistManager {
     }
     let applied = 0;
     let errorToShow: string | null = null;
-    for (let i = 0; i < moves.length; i++) {
-      const move = moves[i];
-      const playlistItemId = idMap[move.videoId];
-      const afterIdx = move.afterVideoId === null ? -1 : arr.findIndex(x => x.videoId === move.afterVideoId);
-      const newPosition = afterIdx + 1;
-      if (!playlistItemId) {
-        const msg = `No playlistItemId in cache for videoId=${move.videoId}. Skipping move.`;
-        log.push(msg);
-        if (getLogger) getLogger().warning(msg);
-        continue;
-      }
-      // Always update local cache: move the item in arr
-      const curIdx = arr.findIndex(x => x.videoId === move.videoId);
-      if (curIdx === -1) {
-        const msg = `Could not find videoId=${move.videoId} in playlist for move. Skipping.`;
-        log.push(msg);
-        if (getLogger) getLogger().warning(msg);
-        continue;
-      }
-      const [moved] = arr.splice(curIdx, 1);
-      arr.splice(newPosition, 0, moved);
-      arr.forEach((item, idx) => (item.position = idx));
-      playlistCache.items = [...arr];
-      // Print/log the move immediately
-      const moveMsg = move.afterVideoId === null
-        ? `Move ${move.videoId} to the front (position 0)`
-        : `Move ${move.videoId} after ${move.afterVideoId} (to position ${newPosition})`;
-      if (getLogger) getLogger().info(moveMsg);
-      log.push(moveMsg);
-      // Only call YouTube API if enabled, not dryRun, and no previous error
-      if (!dryRun && this.doYoutubeApiCalls && youtubeClient && !errorToShow) {
+    // Only call YouTube API if enabled, not dryRun, and no previous error
+    if (!dryRun && this.doYoutubeApiCalls && youtubeClient) {
+      for (let i = 0; i < moves.length; i++) {
+        if (errorToShow) break;
+        const move = moves[i];
+        const playlistItemId = idMap[move.videoId];
+        const afterIdx = move.afterVideoId === null ? -1 : arr.findIndex(x => x.videoId === move.afterVideoId);
+        const newPosition = afterIdx + 1;
+        if (!playlistItemId) {
+          const msg = `No playlistItemId in cache for videoId=${move.videoId}. Skipping move.`;
+          log.push(msg);
+          if (getLogger) getLogger().warning(msg);
+          continue;
+        }
         try {
           await youtubeClient.updatePlaylistItemPosition(playlistItemId, newPosition);
           applied++;
