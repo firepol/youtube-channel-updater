@@ -295,6 +295,7 @@ class PlaylistManager {
     const prefix = dryRun ? '[DRY RUN] ' : '';
     getLogger().info(`${prefix}${dryRun ? 'Would sort' : 'Sorted'} playlist '${playlistTitle}' by ${sortField}.`);
     getLogger().info(`${prefix}Total moves${dryRun ? '' : ' applied'}: ${dryRun ? summary.moves.length : summary.applied} / ${summary.totalMoves}`);
+    if (!dryRun) return; // No need to print moves summary in live mode
     getLogger().info(`${prefix}Minimal moves to sort:`);
     if (summary.moves.length === 0) {
       getLogger().info(`${prefix}  No moves needed.`);
@@ -352,18 +353,11 @@ class PlaylistManager {
       log.push('No moves needed.');
       return { moves, totalMoves: 0, applied: 0, resultOrder: currentOrder, desiredOrder, log };
     }
-    // 3. Apply moves in-memory using performMoveOperations (restoring previous logic)
+    // 3. Prepare for move application
     let arr = [...playlistCache.items];
     const { performMoveOperations } = await import('../src/utils/playlist-sort-ops');
-    performMoveOperations(arr, moves);
-    // Log each move as it happens (simulate immediate feedback)
-    for (const move of moves) {
-      const moveMsg = move.afterVideoId === null
-        ? `Move ${move.videoId} to the front`
-        : `Move ${move.videoId} after ${move.afterVideoId}`;
-      if (getLogger) getLogger().info(moveMsg);
-      log.push(moveMsg);
-    }
+    let applied = 0;
+    let errorToShow: string | null = null;
     // Map videoId to playlistItemId from cache (needed for API calls)
     const idMap: Record<string, string> = {};
     for (const item of playlistCache.items) {
@@ -371,25 +365,34 @@ class PlaylistManager {
         idMap[item.videoId] = (item as any).playlistItemId;
       }
     }
-    let applied = 0;
-    let errorToShow: string | null = null;
-    // Only call YouTube API if enabled, not dryRun, and no previous error
     if (!dryRun && this.doYoutubeApiCalls && youtubeClient) {
+      // Live mode: apply each move, log, and persist after each
       for (let i = 0; i < moves.length; i++) {
-        if (errorToShow) break;
         const move = moves[i];
+        const moveMsg = `Moving videoId=${move.videoId} to position after ${move.afterVideoId === null ? 'START' : move.afterVideoId}`;
+        if (getLogger) getLogger().info(`${i + 1}. ${moveMsg}`);
+        log.push(moveMsg);
         const playlistItemId = idMap[move.videoId];
-        const afterIdx = move.afterVideoId === null ? -1 : arr.findIndex(x => x.videoId === move.afterVideoId);
-        const newPosition = afterIdx + 1;
         if (!playlistItemId) {
           const msg = `No playlistItemId in cache for videoId=${move.videoId}. Skipping move.`;
           log.push(msg);
           if (getLogger) getLogger().warning(msg);
           continue;
         }
+        // Apply move in-memory first, so arr reflects the new order
+        performMoveOperations(arr, [move]);
+        // Now calculate the new position for the API call based on the updated arr
+        const afterIdx = move.afterVideoId === null ? -1 : arr.findIndex(x => x.videoId === move.afterVideoId);
+        const newPosition = afterIdx + 1;
         try {
           await youtubeClient.updatePlaylistItemPosition(playlistItemId, newPosition);
           applied++;
+          // Update playlistCache.items to reflect the new order
+          playlistCache.items = [...arr];
+          // Write to disk after each move
+          if (this.writePlaylistCache) {
+            await this.savePlaylistCache(playlistCache.id, playlistCache, false);
+          }
         } catch (err: any) {
           const errMsg = err && err.message ? err.message : String(err);
           if (getLogger) getLogger().error(`Failed to move playlistItemId=${playlistItemId} for videoId=${move.videoId}: ${errMsg}`);
@@ -398,12 +401,17 @@ class PlaylistManager {
           break;
         }
       }
+    } else {
+      // Dry run: simulate all moves in-memory, log each
+      for (const move of moves) {
+        const moveMsg = `[DRY RUN] Would move videoId=${move.videoId} to position after ${move.afterVideoId === null ? 'START' : move.afterVideoId}`;
+        log.push(moveMsg);
+      }
+      performMoveOperations(arr, moves);
     }
-    // Always update playlist cache in-memory, and optionally write to disk
+    // Always update playlist cache in-memory to reflect the final order
     playlistCache.items = [...arr];
-    if (!dryRun && this.writePlaylistCache) {
-      await this.savePlaylistCache(playlistCache.id, playlistCache);
-    }
+    // (No need to write to disk again here, already done after each move in live mode)
     const resultOrder = arr.map(x => x.videoId);
     return { moves, totalMoves: moves.length, applied, resultOrder, desiredOrder, log, error: errorToShow };
   }
