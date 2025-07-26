@@ -180,5 +180,10 @@ export function logVerbose(message: string): void {
   }
 }
 
+// Global helper to check if VERBOSE is set in the environment
+export function isVerbose(): boolean {
+  return process.env.VERBOSE === 'true';
+}
+
 // Export the Logger class for direct usage if needed
-export { Logger }; 
+export { Logger };
