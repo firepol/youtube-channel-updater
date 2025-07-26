@@ -313,7 +313,6 @@ class PlaylistManager {
     } else {
       getLogger().warning(`${prefix}Resulting order does NOT match desired order!`);
     }
-    summary.log.forEach(line => getLogger().info(`${prefix}${line}`));
   }
   /**
    * Sorts playlist items and applies minimal moves (in-memory and optionally via API/cache)
