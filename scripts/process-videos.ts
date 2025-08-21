@@ -54,6 +54,7 @@ interface ProcessingOptions {
   descriptionNotContains?: string; // Direct description not contains filter
   minViews?: number; // Direct views filter
   maxViews?: number; // Direct views filter
+  embeddable?: boolean; // Direct embeddable filter
 }
 
 interface DryRunPreview {
@@ -1160,6 +1161,7 @@ async function main(): Promise<void> {
     .option('--description-not-contains <text>', 'Direct description not contains filter')
     .option('--min-views <number>', 'Direct views filter')
     .option('--max-views <number>', 'Direct views filter')
+    .option('--embeddable <boolean>', 'Direct embeddable filter')
     .option('--publish', 'Publish filtered videos by setting privacyStatus to public and madeForKids to false')
     .option('--csv <file>', 'Output file for CSV results');
 
@@ -1228,7 +1230,8 @@ async function main(): Promise<void> {
       options.filterConfig || options.privacyStatus || options.publishedAfter || 
       options.publishedBefore || options.titleContains || options.titleNotContains || 
       options.descriptionContains || options.descriptionNotContains || 
-      options.minViews !== undefined || options.maxViews !== undefined
+      options.minViews !== undefined || options.maxViews !== undefined ||
+      options.embeddable !== undefined
     ) {
       // Filtering videos directly from channel database
       getLogger().info('Filtering videos directly from channel database...');
@@ -1256,6 +1259,14 @@ async function main(): Promise<void> {
           if (typeof value === 'string' && !isNaN(Number(value)) && (type.includes('views'))) {
             value = Number(value);
           }
+          // Handle boolean values for embeddable and other boolean filters
+          if (typeof value === 'string' && (type === 'embeddable' || type.includes('_kids') || type.includes('public_stats_viewable'))) {
+            if (value.toLowerCase() === 'true') {
+              value = true;
+            } else if (value.toLowerCase() === 'false') {
+              value = false;
+            }
+          }
           combinedFilters.push({ type, value });
         }
       };
@@ -1268,6 +1279,7 @@ async function main(): Promise<void> {
       addFilter('description_not_contains', options.descriptionNotContains);
       addFilter('min_views', options.minViews);
       addFilter('max_views', options.maxViews);
+      addFilter('embeddable', options.embeddable);
       if (combinedFilters.length === 0) {
         getLogger().error('No valid filters specified');
         process.exit(1);
