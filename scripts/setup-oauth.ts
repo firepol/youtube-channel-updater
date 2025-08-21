@@ -4,6 +4,7 @@ import { YouTubeClient } from '../src/api/youtube-client';
 import { ConfigLoader } from '../src/config/config-loader';
 import { initializeLogger, LogLevel } from '../src/utils/logger';
 import * as readline from 'readline';
+import * as fs from 'fs-extra';
 
 class OAuthSetup {
   private youtubeClient!: YouTubeClient;
@@ -40,6 +41,9 @@ class OAuthSetup {
       const tokensLoaded = await this.youtubeClient.loadTokens();
       if (tokensLoaded) {
         this.logger.info('OAuth tokens loaded successfully');
+        
+        // Check if tokens are expired immediately after loading
+        await this.checkTokenExpiry();
       } else {
         this.logger.info('No OAuth tokens found - authentication required');
       }
@@ -73,9 +77,57 @@ class OAuthSetup {
   }
 
   /**
+   * Check if OAuth tokens are expired
+   */
+  private async checkTokenExpiry(): Promise<boolean> {
+    try {
+      const tokenPath = 'token.json';
+      if (await fs.pathExists(tokenPath)) {
+        const tokens = await fs.readJson(tokenPath);
+        
+        // Check if expiry_date exists and if token is expired
+        if (tokens.expiry_date) {
+          const currentTime = Date.now();
+          const expiryTime = tokens.expiry_date;
+          
+          if (currentTime > expiryTime) {
+            // Delete expired token file
+            await fs.remove(tokenPath);
+            console.log('You need to authenticate again. Please run the setup command.');
+            
+            return true; // Token was expired
+          } else {
+            const timeUntilExpiry = expiryTime - currentTime;
+            const hoursUntilExpiry = Math.floor(timeUntilExpiry / (1000 * 60 * 60));
+            const minutesUntilExpiry = Math.floor((timeUntilExpiry % (1000 * 60 * 60)) / (1000 * 60));
+            
+            console.log(`OAuth tokens are valid for ${hoursUntilExpiry}h ${minutesUntilExpiry}m`);
+            return false; // Token is not expired
+          }
+        } else {
+          await fs.remove(tokenPath);
+          console.log('Deleted token.json file (no expiry date)');
+          return true; // Treat as expired
+        }
+      }
+      return false; // No tokens found
+    } catch (error) {
+      this.logger.error('Error checking token expiry:', error as Error);
+      return false;
+    }
+  }
+
+  /**
    * Check if already authenticated
    */
-  isAuthenticated(): boolean {
+  async isAuthenticated(): Promise<boolean> {
+    // First check if tokens are expired
+    const isExpired = await this.checkTokenExpiry();
+    if (isExpired) {
+      return false;
+    }
+    
+    // Then check if authenticated
     return this.youtubeClient.isAuthenticated();
   }
 
@@ -85,7 +137,7 @@ class OAuthSetup {
   async setupOAuth(): Promise<void> {
     try {
       // Check if already authenticated
-      if (this.isAuthenticated()) {
+      if (await this.isAuthenticated()) {
         this.logger.success('Already authenticated with OAuth!');
         return;
       }
@@ -137,7 +189,7 @@ class OAuthSetup {
    */
   async testAuthentication(): Promise<void> {
     try {
-      if (!this.isAuthenticated()) {
+      if (!await this.isAuthenticated()) {
         this.logger.error('Not authenticated with OAuth');
         return;
       }
