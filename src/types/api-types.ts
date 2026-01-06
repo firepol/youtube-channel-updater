@@ -269,6 +269,7 @@ export interface PlaylistRule {
   title: string;
   description?: string | undefined;
   keywords: string[];
+  negativeKeywords?: string[] | undefined;
   visibility?: 'public' | 'private' | 'unlisted' | undefined;
 }
 

@@ -161,10 +161,18 @@ class PlaylistDiscoverer {
           ? existingPlaylist.keywords
           : [];
 
+        // Defensive: ensure negativeKeywords is an array (if present)
+        const negativeKeywords = Array.isArray(existingPlaylist.negativeKeywords)
+          ? existingPlaylist.negativeKeywords
+          : undefined;
+
         // Track keyword preservation
         if (keywords.length > 0) {
           keywordsPreservedCount++;
           this.logger.verbose(`Preserving ${keywords.length} keywords for: ${discoveredPlaylist.title}`);
+        }
+        if (negativeKeywords && negativeKeywords.length > 0) {
+          this.logger.verbose(`Preserving ${negativeKeywords.length} negative keywords for: ${discoveredPlaylist.title}`);
         }
 
         if (titleChanged || descriptionChanged) {
@@ -184,6 +192,7 @@ class PlaylistDiscoverer {
           title: discoveredPlaylist.title || existingPlaylist.title,
           description: discoveredPlaylist.description || existingPlaylist.description,
           keywords: keywords, // Preserve user-configured keywords with defensive check
+          negativeKeywords: negativeKeywords, // Preserve user-configured negative keywords
           visibility: existingPlaylist.visibility || 'private' // Preserve user-configured visibility
         });
 

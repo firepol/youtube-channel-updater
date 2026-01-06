@@ -41,6 +41,7 @@ const PlaylistRuleSchema = z.object({
   title: z.string().min(1, 'Playlist title is required'),
   description: z.string().optional(),
   keywords: z.array(z.string()).min(1, 'At least one keyword is required'),
+  negativeKeywords: z.array(z.string()).optional(),
   visibility: z.enum(['public', 'private', 'unlisted']).optional()
 });
 

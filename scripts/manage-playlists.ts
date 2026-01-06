@@ -230,9 +230,32 @@ class PlaylistMatcher {
    * Get all matching playlists for a video title
    */
   getMatchingPlaylists(videoTitle: string, playlists: PlaylistRule[]): PlaylistRule[] {
-    return playlists.filter(playlist => 
-      this.matchesPlaylist(videoTitle, playlist.keywords)
-    );
+    return playlists.filter(playlist => {
+      // Must match at least one positive keyword
+      const matchesPositive = this.matchesPlaylist(videoTitle, playlist.keywords);
+      if (!matchesPositive) return false;
+
+      // Debug: log playlist being checked
+      logVerbose(`[PLAYLIST MATCH] Checking "${playlist.title}" for video "${videoTitle}"`);
+      logVerbose(`[PLAYLIST MATCH]   Positive keywords: ${JSON.stringify(playlist.keywords)}`);
+      logVerbose(`[PLAYLIST MATCH]   Negative keywords: ${JSON.stringify(playlist.negativeKeywords)}`);
+
+      // Must NOT match any negative keyword
+      if (playlist.negativeKeywords && playlist.negativeKeywords.length > 0) {
+        logVerbose(`[PLAYLIST MATCH]   Checking ${playlist.negativeKeywords.length} negative keywords...`);
+        const matchesNegative = this.matchesPlaylist(videoTitle, playlist.negativeKeywords);
+        logVerbose(`[PLAYLIST MATCH]   Negative keyword match result: ${matchesNegative}`);
+        if (matchesNegative) {
+          logVerbose(`[NEGATIVE KEYWORDS] ❌ Excluding "${videoTitle}" from playlist "${playlist.title}" - matched negative keyword`);
+          return false;
+        }
+      } else {
+        logVerbose(`[PLAYLIST MATCH]   No negative keywords to check`);
+      }
+
+      logVerbose(`[PLAYLIST MATCH] ✅ Including "${videoTitle}" in playlist "${playlist.title}"`);
+      return true;
+    });
   }
 }
 
@@ -1357,9 +1380,12 @@ async function main(): Promise<void> {
       }
       // If --list, only process orphans that match the playlist rule
       if (targetPlaylist) {
-        // Only assign orphans to the target playlist if they match its keywords
+        // Only assign orphans to the target playlist if they match its keywords (respecting negative keywords)
         const matcher = new PlaylistMatcher();
-        orphans = orphans.filter(v => matcher.matchesPlaylist(v.title, targetPlaylist!.keywords));
+        orphans = orphans.filter(v => {
+          const matches = matcher.getMatchingPlaylists(v.title, [targetPlaylist!]);
+          return matches.length > 0;
+        });
         getLogger().info(`Of those, ${orphans.length} match playlist: ${targetPlaylist.title}`);
         if (orphans.length === 0) {
           getLogger().info('No orphan videos match the specified playlist');
@@ -1411,13 +1437,13 @@ async function main(): Promise<void> {
       // === CSV EXPORT FOR ORPHANS ===
       if (options.output) {
         const csvFile = options.output.endsWith('.json') ? options.output.replace(/\.json$/, '.csv') : options.output + '.csv';
-        // For each orphan, determine assignments and playlists (simulate matching)
+        // For each filtered orphan, determine assignments and playlists (simulate matching)
         const config = await loadConfig();
         const matcher = new PlaylistMatcher();
         const allPlaylists = config.playlists.playlists;
-        const rows = orphans.map(v => {
-          // Find all playlists this orphan would be assigned to
-          const matched = allPlaylists.filter(p => matcher.matchesPlaylist(v.title, p.keywords));
+        const rows = videos.map(v => {
+          // Find all playlists this orphan would be assigned to (respecting negative keywords)
+          const matched = matcher.getMatchingPlaylists(v.title, allPlaylists);
           const assignments = matched.length;
           const playlistNames = matched.map(p => p.title).join(',');
           return {
@@ -1547,10 +1573,13 @@ async function main(): Promise<void> {
         getLogger().info('[SIMULATE] No orphan videos to process');
         return;
       }
-      // If --list, only process orphans that match the playlist rule
+      // If --list, only process orphans that match the playlist rule (respecting negative keywords)
       if (targetPlaylist) {
         const matcher = new PlaylistMatcher();
-        orphans = orphans.filter(v => matcher.matchesPlaylist(v.title, targetPlaylist!.keywords));
+        orphans = orphans.filter(v => {
+          const matches = matcher.getMatchingPlaylists(v.title, [targetPlaylist!]);
+          return matches.length > 0;
+        });
         getLogger().info(`[SIMULATE] Of those, ${orphans.length} match playlist: ${targetPlaylist.title}`);
         if (orphans.length === 0) {
           getLogger().info('[SIMULATE] No orphan videos match the specified playlist');
@@ -1561,7 +1590,7 @@ async function main(): Promise<void> {
       const config = await loadConfig();
       const playlistManager = new PlaylistManager(new YouTubeClient('', '', '', '', 0, 0, 0), config.playlists);
       for (const video of orphans) {
-        const playlistsToAssign = targetPlaylist ? [targetPlaylist] : config.playlists.playlists.filter(p => playlistManager["matcher"].matchesPlaylist(video.title, p.keywords));
+        const playlistsToAssign = targetPlaylist ? [targetPlaylist] : playlistManager["matcher"].getMatchingPlaylists(video.title, config.playlists.playlists);
         for (const playlist of playlistsToAssign) {
           // Load or refresh playlist cache
           let playlistCache = await playlistManager["loadPlaylistCache"](playlist.id, playlist.title);
