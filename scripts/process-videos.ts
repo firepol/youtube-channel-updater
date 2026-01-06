@@ -242,7 +242,13 @@ class VideoProcessor {
       getLogger().warning('No recording date available for title transformation');
       return this.applyTransforms(originalTitle, transforms);
     }
-    const result = this.applyTransforms(originalTitle, transforms);
+    let result = this.applyTransforms(originalTitle, transforms);
+
+    // Capitalize first letter if transformation occurred
+    if (result !== originalTitle && result.length > 0) {
+      result = result.charAt(0).toUpperCase() + result.slice(1);
+    }
+
     if (result !== originalTitle) {
       getLogger().info(`Title transformed: "${originalTitle}" → "${result}"`);
     }
