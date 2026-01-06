@@ -1368,6 +1368,46 @@ async function main(): Promise<void> {
       }
       videos = orphans;
 
+      // Apply additional filter criteria to orphans if specified
+      if (options.titleContains || options.titleNotContains || options.descriptionContains ||
+          options.descriptionNotContains || options.privacyStatus || options.publishedAfter ||
+          options.publishedBefore || options.minViews !== undefined || options.maxViews !== undefined) {
+        const videoFilter = new VideoFilter();
+        const filters: FilterRule[] = [];
+
+        const addFilter = (type: string, value: any) => {
+          if (value !== undefined) {
+            // Convert string numbers to actual numbers
+            if (typeof value === 'string' && !isNaN(Number(value)) &&
+                (type.includes('views'))) {
+              value = Number(value);
+            }
+            filters.push({ type, value });
+          }
+        };
+
+        addFilter('privacy_status', options.privacyStatus);
+        addFilter('published_after', options.publishedAfter);
+        addFilter('published_before', options.publishedBefore);
+        addFilter('title_contains', options.titleContains);
+        addFilter('title_not_contains', options.titleNotContains);
+        addFilter('description_contains', options.descriptionContains);
+        addFilter('description_not_contains', options.descriptionNotContains);
+        addFilter('min_views', options.minViews);
+        addFilter('max_views', options.maxViews);
+
+        if (filters.length > 0) {
+          const beforeFilterCount = videos.length;
+          videos = videoFilter.applyFilters(videos, filters);
+          getLogger().info(`Applied filters to orphans: ${beforeFilterCount} → ${videos.length} videos`);
+
+          if (videos.length === 0) {
+            getLogger().info('No orphan videos match the specified filter criteria');
+            return;
+          }
+        }
+      }
+
       // === CSV EXPORT FOR ORPHANS ===
       if (options.output) {
         const csvFile = options.output.endsWith('.json') ? options.output.replace(/\.json$/, '.csv') : options.output + '.csv';
