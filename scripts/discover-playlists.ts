@@ -86,21 +86,50 @@ class PlaylistDiscoverer {
   }
 
   /**
+   * Create backup of existing playlist configuration
+   */
+  private async backupPlaylistConfig(): Promise<void> {
+    const configPath = path.join(this.configDir, 'playlists.json');
+
+    try {
+      if (await fs.pathExists(configPath)) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        const backupDir = 'logs/config-backups';
+        await fs.ensureDir(backupDir);
+
+        const backupPath = path.join(backupDir, `playlists-${timestamp}.json`);
+        await fs.copy(configPath, backupPath);
+
+        this.logger.success(`Created backup: ${backupPath}`);
+      }
+    } catch (error) {
+      this.logger.warning('Failed to create backup, continuing anyway');
+    }
+  }
+
+  /**
    * Load existing playlist configuration
    */
   private async loadExistingPlaylistConfig(): Promise<PlaylistConfig> {
     const configPath = path.join(this.configDir, 'playlists.json');
-    
+
     try {
       if (await fs.pathExists(configPath)) {
         const existingConfig = await fs.readJson(configPath);
         this.logger.verbose('Loaded existing playlist configuration');
+
+        // Validate the loaded config
+        if (!existingConfig.playlists || !Array.isArray(existingConfig.playlists)) {
+          this.logger.warning('Invalid playlist configuration format, starting fresh');
+          return { playlists: [] };
+        }
+
         return existingConfig;
       }
     } catch (error) {
       this.logger.warning('Failed to load existing playlist configuration, starting fresh');
     }
-    
+
     return { playlists: [] };
   }
 
@@ -108,24 +137,36 @@ class PlaylistDiscoverer {
    * Merge discovered playlists with existing configuration
    */
   private mergePlaylistConfigs(
-    existingConfig: PlaylistConfig, 
+    existingConfig: PlaylistConfig,
     discoveredPlaylists: YouTubePlaylist[]
   ): PlaylistConfig {
     const existingPlaylists = new Map(
       existingConfig.playlists.map(p => [p.id, p])
     );
-    
+
     const mergedPlaylists: PlaylistRule[] = [];
     let updatedCount = 0;
-    
+    let keywordsPreservedCount = 0;
+
     for (const discoveredPlaylist of discoveredPlaylists) {
       const existingPlaylist = existingPlaylists.get(discoveredPlaylist.id);
-      
+
       if (existingPlaylist) {
         // Check if title or description has changed
         const titleChanged = discoveredPlaylist.title !== existingPlaylist.title;
         const descriptionChanged = discoveredPlaylist.description !== existingPlaylist.description;
-        
+
+        // Defensive: ensure keywords is an array
+        const keywords = Array.isArray(existingPlaylist.keywords)
+          ? existingPlaylist.keywords
+          : [];
+
+        // Track keyword preservation
+        if (keywords.length > 0) {
+          keywordsPreservedCount++;
+          this.logger.verbose(`Preserving ${keywords.length} keywords for: ${discoveredPlaylist.title}`);
+        }
+
         if (titleChanged || descriptionChanged) {
           updatedCount++;
           this.logger.info(`Updating playlist "${discoveredPlaylist.title}":`);
@@ -136,16 +177,16 @@ class PlaylistDiscoverer {
             this.logger.info(`  Description: "${existingPlaylist.description}" → "${discoveredPlaylist.description}"`);
           }
         }
-        
+
         // Update existing playlist - preserve user fields, update API fields
         mergedPlaylists.push({
           id: discoveredPlaylist.id,
           title: discoveredPlaylist.title || existingPlaylist.title,
           description: discoveredPlaylist.description || existingPlaylist.description,
-          keywords: existingPlaylist.keywords, // Preserve user-configured keywords
-          visibility: existingPlaylist.visibility // Preserve user-configured visibility
+          keywords: keywords, // Preserve user-configured keywords with defensive check
+          visibility: existingPlaylist.visibility || 'private' // Preserve user-configured visibility
         });
-        
+
         if (!titleChanged && !descriptionChanged) {
           this.logger.verbose(`No changes for existing playlist: ${discoveredPlaylist.title}`);
         }
@@ -158,15 +199,19 @@ class PlaylistDiscoverer {
           keywords: [], // Empty keywords for new playlists
           visibility: (discoveredPlaylist.privacyStatus as 'public' | 'private' | 'unlisted') || 'private'
         });
-        
+
         this.logger.info(`Added new playlist: ${discoveredPlaylist.title}`);
       }
     }
-    
+
     if (updatedCount > 0) {
       this.logger.info(`Updated ${updatedCount} existing playlists with new API data`);
     }
-    
+
+    if (keywordsPreservedCount > 0) {
+      this.logger.success(`Preserved keywords for ${keywordsPreservedCount} playlists`);
+    }
+
     return { playlists: mergedPlaylists };
   }
 
@@ -329,6 +374,9 @@ class PlaylistDiscoverer {
 
       // Merge discovered playlists with existing configuration
       if (!listValue) {
+        // Create backup before overwriting
+        await this.backupPlaylistConfig();
+
         const mergedConfig = this.mergePlaylistConfigs(existingConfig, allPlaylists);
         const configPath = path.join(this.configDir, 'playlists.json');
         try {
